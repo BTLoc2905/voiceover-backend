@@ -110,6 +110,7 @@ public class PoiService {
     // UC02: Lấy thuyết minh và audio theo ngôn ngữ, tự động fallback về ngôn ngữ mặc định nếu thiếu (UC02-E3)
     public Map<String, Object> getPoiAudioGuide(Long poiId, String requestedLang) {
         Poi poi = poiRepo.findById(poiId).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại"));
+        if (!"PUBLISHED".equalsIgnoreCase(poi.getStatus())) throw new IllegalArgumentException("POI này chưa xuất bản hoặc đã tạm ẩn.");
         String defaultLang = languageRepo.findByIsDefaultTrue().map(Language::getCode).orElse("vi");
 
         boolean fallbackUsed = false;
@@ -148,12 +149,17 @@ public class PoiService {
         response.put("textContent", transOpt.map(Translation::getContent).orElse(poi.getDescriptionSource()));
         response.put("audioUrl", audioOpt.map(Audio::getFilePath).orElse(null));
         response.put("audioStatus", audioOpt.map(Audio::getStatus).orElse("TEXT_ONLY"));
+        response.put("browserTtsAllowed", languageRepo.findById(activeLang).map(Language::isTtsSupported).orElse(false));
         return response;
     }
 
     // UC06 & UC08: Tạo mới hoặc cập nhật POI và kích hoạt Pipeline tự động
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Poi saveOrUpdatePoi(Poi poiRequest) {
+        if (poiRequest.getId() != null) {
+            poiRepo.findForUpdate(poiRequest.getId()).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
+            if (!RouteSessionService.published(poiRequest.getStatus()) || !RouteSessionService.hasValidCoordinates(poiRequest)) rejectServingRoutes(poiRequest.getId());
+        }
         if (poiRequest.getSourceLanguageCode() == null || poiRequest.getSourceLanguageCode().isBlank()) {
             poiRequest.setSourceLanguageCode("vi");
         }
@@ -166,12 +172,22 @@ public class PoiService {
     }
 
     // UC06 & Quy tắc F-05: Chặn xóa POI nếu đang nằm trong Route/Session đã xuất bản
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void deletePoiSafely(Long poiId) {
-        if (routeStopRepo.existsInPublishedRouteOrSession(poiId)) {
-            throw new IllegalStateException("CẢNH BÁO ĐỨT GÃY LỘ TRÌNH: Không thể xóa POI đang thuộc Route hoặc Session ở trạng thái Đã xuất bản (PUBLISHED)!");
-        }
+        poiRepo.findForUpdate(poiId).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
+        rejectServingRoutes(poiId);
+        List<Route> references = routeStopRepo.findReferencingRoutes(poiId);
+        if (!references.isEmpty()) throw new RouteConflictException("Hãy bỏ POI khỏi các Route trước khi xóa: " + routeNames(references));
         poiRepo.deleteById(poiId);
+    }
+
+    private void rejectServingRoutes(Long poiId) {
+        List<Route> affected = routeStopRepo.findServingRoutes(poiId);
+        if (!affected.isEmpty()) throw new RouteConflictException("Không thể xóa, ẩn/chuyển nháp hoặc làm mất tọa độ hợp lệ của POI đang phục vụ du khách. Route bị ảnh hưởng: " + routeNames(affected));
+    }
+
+    private String routeNames(List<Route> routes) {
+        return routes.stream().map(route -> "'" + route.getName() + "' (#" + route.getId() + ")").collect(Collectors.joining(", "));
     }
 
     // UC07: Gợi ý bản nháp mô tả gốc bằng AI (Không tự động lưu vào CSDL)

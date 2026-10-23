@@ -1,7 +1,7 @@
 -- Các cột này được dùng để tra audio theo POI và ngôn ngữ.
 ALTER TABLE audio
-    ADD COLUMN IF NOT EXISTS poi_id BIGINT NULL,
-    ADD COLUMN IF NOT EXISTS language_code VARCHAR(10) NULL;
+    ADD COLUMN poi_id BIGINT NULL,
+    ADD COLUMN language_code VARCHAR(10) NULL;
 
 UPDATE audio a
 JOIN translation t ON t.translation_id = a.translation_id

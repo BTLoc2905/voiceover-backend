@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./AdminPortal.css";
+import SessionRoutes from "./SessionRoutes.jsx";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -105,11 +106,17 @@ function PoiManagement() {
 
 export default function AdminPortal() {
   const [account, setAccount] = useState(() => JSON.parse(localStorage.getItem("voicemap-admin") || "null"));
-  const [page, setPage] = useState(() => window.location.pathname === "/poimanagement" ? "pois" : "dashboard");
+  const resolvePage = () => window.location.pathname === "/poimanagement" ? "pois" : window.location.pathname.startsWith("/admin/sessions") ? "sessions" : "dashboard";
+  const [page, setPage] = useState(resolvePage);
+  useEffect(() => {
+    const handleBack = () => setPage(resolvePage());
+    window.addEventListener("popstate", handleBack);
+    return () => window.removeEventListener("popstate", handleBack);
+  }, []);
   const navigateAdmin = (path, nextPage) => {
     window.history.pushState({}, "", path);
     setPage(nextPage);
   };
   if (!account) return <Login onLogin={(value) => { localStorage.setItem("voicemap-admin", JSON.stringify(value)); setAccount(value); }} />;
-  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button disabled>◎ <span>Sessions & Routes</span><em>Soon</em></button><button disabled>◌ <span>Translations & Audio</span><em>Soon</em></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { localStorage.removeItem("voicemap-admin"); setAccount(null); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : "POI Management"}</span><span className="live-status">● System operational</span></header>{page === "dashboard" ? <Dashboard /> : <PoiManagement />}</main></div>;
+  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "sessions" ? "active" : ""} onClick={() => navigateAdmin("/admin/sessions", "sessions")}>◎ <span>Sessions & Routes</span></button><button disabled>◌ <span>Translations & Audio</span><em>Soon</em></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { localStorage.removeItem("voicemap-admin"); setAccount(null); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "sessions" ? "Sessions & Routes" : "POI Management"}</span><span className="live-status">● System operational</span></header>{page === "dashboard" ? <Dashboard /> : page === "sessions" ? <SessionRoutes /> : <PoiManagement />}</main></div>;
 }

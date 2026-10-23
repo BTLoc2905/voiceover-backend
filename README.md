@@ -1,5 +1,9 @@
 # VoiceMap — Backend
 
+> UC02 GPS 23/10/2026: xem [yêu cầu, cách dùng và bằng chứng kiểm tra](./UC02_GPS_IMPLEMENTATION.md). Nghe thủ công đã có; bản mới nối tự phát GPS với bộ phát chung. Backend đã restart, kiểm API ghi lượt nghe trên MySQL và dữ liệu Session/Route sau restart đã qua; nghiệm thu GPS/audio trên thiết bị thực còn được ghi riêng.
+
+> Cập nhật Session & Routes 23/10/2026: xem [phạm vi đã duyệt, API, migration và kiểm chứng](./SESSION_ROUTES_REQUIREMENTS.md). Admin mở `/admin/sessions`; khách xem và bắt đầu Route thuộc UC04, tùy chỉnh thuộc UC03. Các ghi chú skeleton/tiến độ cũ bên dưới chưa phản ánh toàn bộ working tree.
+
 > Hệ thống ứng dụng **thuyết minh tự động đa ngôn ngữ** (Multilingual Auto-Tour Guide System).
 > Backend phục vụ ứng dụng di động của du khách, Admin Portal và Monitoring Dashboard.
 
