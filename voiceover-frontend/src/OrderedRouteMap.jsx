@@ -7,6 +7,7 @@ export default function OrderedRouteMap({ pois, geometry, selectedIndex, onSelec
   const container = useRef(null);
   const map = useRef(null);
   const select = useRef(onSelect);
+  const locationLayer = useRef(null);
   useEffect(() => { select.current = onSelect; }, [onSelect]);
   useEffect(() => {
     const instance = L.map(container.current).setView([10.7769, 106.7009], 13);
@@ -33,9 +34,22 @@ export default function OrderedRouteMap({ pois, geometry, selectedIndex, onSelec
       if (selectedIndex === index) marker.openTooltip();
     });
     if (geometry?.type === "LineString") L.geoJSON(geometry, { style: { color: "#356ff2", weight: 5 } }).addTo(group);
-    if (location) L.circleMarker([location.lat, location.lng], { radius: 7, color: "white", fillColor: "#13946a", fillOpacity: 1 }).bindTooltip("Vị trí của bạn").addTo(group);
     if (group.getBounds().isValid()) instance.fitBounds(group.getBounds(), { padding: [35, 35], maxZoom: 16, animate: false });
     return () => group.remove();
-  }, [pois, geometry, selectedIndex, location]);
+  }, [pois, geometry, selectedIndex]);
+  useEffect(() => {
+    const instance = map.current;
+    locationLayer.current?.remove();
+    locationLayer.current = null;
+    if (instance && location) {
+      locationLayer.current = L.circleMarker([location.lat, location.lng], {
+        radius: 7, color: "white", fillColor: "#13946a", fillOpacity: 1,
+      }).bindTooltip("Vị trí của bạn").addTo(instance);
+    }
+    return () => {
+      locationLayer.current?.remove();
+      locationLayer.current = null;
+    };
+  }, [location]);
   return <div ref={container} className="ordered-route-map" aria-label="Bản đồ thứ tự POI" />;
 }

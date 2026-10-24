@@ -6,6 +6,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -102,5 +104,41 @@ class TranslationReviewServiceTest {
         assertNull(service.reserveTranslation(1L,"vi",vi.getSourceHash())); assertEquals(1,jobs.size());
         service.fail(jobs.getFirst().getId(),"TTS failure",3);
         assertNull(service.reserveTranslation(1L,"vi",vi.getSourceHash()));
+    }
+
+    @Test void completedTranslationWithFailedAudioQueuesOnlyTts() throws Exception {
+        vi.setSourceHash(hash("Nguồn"));
+        vi.setStatus("COMPLETED");
+        vi.setManualEdit(true);
+        audio.setStatus("FAILED");
+        when(generator.provider("vi")).thenReturn("Google Cloud TTS");
+        PipelineTask task = service.reserveTranslation(1L,"vi",hash("Nguồn"));
+        assertEquals("TTS_ONLY",task.getTaskType());
+        assertTrue(vi.isManualEdit());
+    }
+
+    @Test void completedTranslationIsSkippedOnlyWhenTheAudioFileExists() throws Exception {
+        vi.setSourceHash(hash("Nguồn"));
+        vi.setStatus("COMPLETED");
+        audio.setStatus("COMPLETED");
+        when(generator.provider("vi")).thenReturn("Google Cloud TTS");
+        when(generator.hasUsableFile("/audio/old.mp3")).thenReturn(true);
+        assertNull(service.reserveTranslation(1L,"vi",hash("Nguồn")));
+    }
+
+    @Test void missingCompletedAudioIsNotReportedReadyWhenProviderIsUnavailable() throws Exception {
+        vi.setSourceHash(hash("Nguồn"));
+        vi.setStatus("COMPLETED");
+        audio.setStatus("COMPLETED");
+        audio.setFilePath("/audio/file-that-does-not-exist.wav");
+        when(generator.provider("vi")).thenReturn("UNAVAILABLE");
+        when(generator.hasUsableFile(audio.getFilePath())).thenReturn(false);
+        PipelineTask task = service.reserveTranslation(1L,"vi",hash("Nguồn"));
+        assertEquals("TTS_ONLY",task.getTaskType());
+    }
+
+    private static String hash(String value) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 }

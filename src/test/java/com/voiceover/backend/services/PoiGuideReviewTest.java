@@ -13,7 +13,7 @@ class PoiGuideReviewTest {
     final AudioRepository audios=mock(AudioRepository.class);
     final LanguageRepository languages=mock(LanguageRepository.class);
     final PipelineService pipeline=mock(PipelineService.class);
-    final PoiService service=new PoiService(pois,texts,audios,languages,mock(RouteStopRepository.class),pipeline,mock(OpenStreetMapPoiService.class),mock(WikimediaImageService.class),mock(TranslationReviewService.class));
+    final PoiService service=new PoiService(pois,texts,audios,languages,mock(RouteStopRepository.class),pipeline,mock(OpenStreetMapPoiService.class),mock(WikimediaImageService.class),mock(TranslationReviewService.class),mock(PoiThumbnailService.class));
     void setup(String name) {
         when(pois.findById(1L)).thenReturn(Optional.of(Poi.builder().id(1L).name(name).status("PUBLISHED").descriptionSource("Nguồn").build()));
         var language=Language.builder().code("vi").isActive(true).isDefault(true).ttsSupported(true).build();

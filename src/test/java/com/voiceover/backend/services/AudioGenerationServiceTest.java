@@ -47,4 +47,15 @@ class AudioGenerationServiceTest {
         var generator=new AudioGenerationService("","","","vi",storage.toString(),"https://unused.example");
         assertThrows(IllegalStateException.class,()->generator.generate(1L,"vi","Text"));
     }
+
+    @Test void storedAudioReadinessRequiresARealFileInsideAudioStorage() throws Exception {
+        var generator=new AudioGenerationService("","","","vi",storage.toString(),"https://unused.example");
+        Path file=storage.resolve("existing.wav");
+        Files.write(file,new byte[64]);
+        assertTrue(generator.hasUsableFile("/storage/audio/existing.wav"));
+        assertTrue(generator.hasUsableFile("/audio/existing.wav"));
+        assertFalse(generator.hasUsableFile("/storage/audio/missing.wav"));
+        assertFalse(generator.hasUsableFile("/storage/audio/../../outside.wav"));
+        assertFalse(generator.hasUsableFile("https://example.test/existing.wav"));
+    }
 }

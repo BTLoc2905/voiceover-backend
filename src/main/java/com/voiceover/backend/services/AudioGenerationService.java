@@ -41,6 +41,21 @@ public class AudioGenerationService {
         return "UNAVAILABLE";
     }
 
+    public boolean hasUsableFile(String url) {
+        if (url == null || url.isBlank()) return false;
+        try {
+            String path = URI.create(url).getPath();
+            String prefix;
+            if (path != null && path.startsWith("/storage/audio/")) prefix = "/storage/audio/";
+            else if (path != null && path.startsWith("/audio/")) prefix = "/audio/";
+            else return false;
+            Path file = storage.resolve(path.substring(prefix.length())).normalize();
+            return file.startsWith(storage) && Files.isRegularFile(file) && Files.size(file) > 44;
+        } catch (IllegalArgumentException | IOException | SecurityException error) {
+            return false;
+        }
+    }
+
     public GeneratedAudio generate(Long poiId, String language, String text) throws Exception {
         if (!language.matches("[A-Za-z0-9-]{1,10}")) throw new IllegalArgumentException("Mã ngôn ngữ không hợp lệ.");
         if (text == null || text.isBlank()) throw new IllegalArgumentException("Bản dịch chưa có nội dung.");
@@ -93,7 +108,7 @@ public class AudioGenerationService {
                         .header("Content-Type", "application/json").header("X-Goog-Api-Key", googleKey)
                         .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                if (response.statusCode() / 100 != 2) throw new IOException("Dịch vụ TTS trả HTTP " + response.statusCode() + ". Kiểm tra cấu hình/quota và thử lại.");
+                if (response.statusCode() / 100 != 2) throw new ProviderRequestException("Dịch vụ TTS", response.statusCode());
                 String encoded = mapper.readTree(response.body()).path("audioContent").asText("");
                 if (encoded.isBlank()) throw new IOException("Dịch vụ TTS không trả audioContent.");
                 try (AudioInputStream audio = AudioSystem.getAudioInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(encoded)))) {
