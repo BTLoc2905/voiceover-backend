@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.Locale;
+import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +25,7 @@ public class PoiService {
     private final OpenStreetMapPoiService openStreetMapPoiService;
     private final WikimediaImageService wikimediaImageService;
     private final TranslationReviewService reviewService;
+    private final PoiThumbnailService thumbnailService;
 
     // UC01: Tìm các POI đã xuất bản trong bán kính 500m tính từ vị trí GPS hiện tại
     public List<Map<String, Object>> getNearbyPublishedPois(double userLat, double userLng, double maxRadiusMeters) {
@@ -152,18 +155,17 @@ public class PoiService {
     // UC06 & UC08: Tạo mới hoặc cập nhật POI và kích hoạt Pipeline tự động
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Poi saveOrUpdatePoi(Poi poiRequest) {
+        if (poiRequest == null) throw new IllegalArgumentException("Dữ liệu POI không hợp lệ.");
         if (poiRequest.getId() != null) {
             Poi previous = poiRepo.findForUpdate(poiRequest.getId()).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
             if (!Objects.equals(previous.getDescriptionSource(), poiRequest.getDescriptionSource())
                     || !Objects.equals(previous.getSourceLanguageCode(), poiRequest.getSourceLanguageCode())) reviewService.assertSourceEditable(poiRequest.getId());
             if (!RouteSessionService.published(poiRequest.getStatus()) || !RouteSessionService.hasValidCoordinates(poiRequest)) rejectServingRoutes(poiRequest.getId());
         }
-        if (poiRequest.getSourceLanguageCode() == null || poiRequest.getSourceLanguageCode().isBlank()) {
-            poiRequest.setSourceLanguageCode("vi");
-        }
-        if (poiRequest.getRadiusM() == null || poiRequest.getRadiusM() <= 0) {
-            poiRequest.setRadiusM(50);
-        }
+        validatePoi(poiRequest);
+        poiRequest.setName(poiRequest.getName().strip());
+        poiRequest.setDescriptionSource(poiRequest.getDescriptionSource().strip());
+        poiRequest.setStatus(poiRequest.getStatus().toUpperCase(Locale.ROOT));
         Poi saved = poiRepo.save(poiRequest);
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
@@ -171,6 +173,41 @@ public class PoiService {
             });
         } else pipelineService.triggerFullPipelineForPoi(saved);
         return saved;
+    }
+
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public Poi uploadThumbnail(Long poiId, org.springframework.web.multipart.MultipartFile image) {
+        Poi poi = poiRepo.findForUpdate(poiId).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
+        poi.setThumbnailUrl(thumbnailService.store(poiId, image));
+        return poiRepo.save(poi);
+    }
+
+    private void validatePoi(Poi poi) {
+        if (poi == null) throw new IllegalArgumentException("Dữ liệu POI không hợp lệ.");
+        if (poi.getName() == null || poi.getName().isBlank()) throw new IllegalArgumentException("Tên POI không được để trống.");
+        if (poi.getName().strip().length() > 255) throw new IllegalArgumentException("Tên POI không được vượt quá 255 ký tự.");
+        if (poi.getDescriptionSource() == null || poi.getDescriptionSource().isBlank())
+            throw new IllegalArgumentException("Mô tả gốc không được để trống.");
+        if (poi.getLatitude() == null || poi.getLatitude().compareTo(BigDecimal.valueOf(-90)) < 0
+                || poi.getLatitude().compareTo(BigDecimal.valueOf(90)) > 0)
+            throw new IllegalArgumentException("Vĩ độ phải nằm trong khoảng -90 đến 90.");
+        if (poi.getLongitude() == null || poi.getLongitude().compareTo(BigDecimal.valueOf(-180)) < 0
+                || poi.getLongitude().compareTo(BigDecimal.valueOf(180)) > 0)
+            throw new IllegalArgumentException("Kinh độ phải nằm trong khoảng -180 đến 180.");
+        if (poi.getRadiusM() == null || poi.getRadiusM() <= 0)
+            throw new IllegalArgumentException("Bán kính phải là số nguyên lớn hơn 0 m.");
+        if (poi.getStatus() == null || !Set.of("DRAFT", "PUBLISHED", "HIDDEN").contains(poi.getStatus().toUpperCase(Locale.ROOT)))
+            throw new IllegalArgumentException("Trạng thái POI phải là DRAFT, PUBLISHED hoặc HIDDEN.");
+        if (poi.getThumbnailUrl() != null && poi.getThumbnailUrl().length() > 1000)
+            throw new IllegalArgumentException("URL thumbnail không được vượt quá 1000 ký tự.");
+        if (poi.getThumbnailUrl() != null && !poi.getThumbnailUrl().isBlank()
+                && !poi.getThumbnailUrl().startsWith("/images/")
+                && !(poi.getThumbnailUrl().startsWith("https://") || poi.getThumbnailUrl().startsWith("http://")))
+            throw new IllegalArgumentException("Thumbnail phải là URL HTTP(S) hoặc ảnh đã tải lên trong /images/.");
+        if (poi.getSourceLanguageCode() == null || poi.getSourceLanguageCode().isBlank())
+            throw new IllegalArgumentException("Hãy chọn ngôn ngữ gốc của mô tả.");
+        if (languageRepo.findById(poi.getSourceLanguageCode()).filter(Language::isActive).isEmpty())
+            throw new IllegalArgumentException("Ngôn ngữ gốc không tồn tại hoặc đã ngừng hoạt động.");
     }
 
     // UC06 & Quy tắc F-05: Chặn xóa POI nếu đang nằm trong Route/Session đã xuất bản

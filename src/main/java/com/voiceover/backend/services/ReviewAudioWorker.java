@@ -28,11 +28,19 @@ public class ReviewAudioWorker {
             catch (InterruptedException error) { Thread.currentThread().interrupt(); message = "Tạo audio bị gián đoạn. Hãy thử lại."; failures++; break; }
             catch (Exception error) {
                 failures++;
-                if (error instanceof IllegalStateException || error instanceof java.io.IOException) message = error.getMessage();
+                if (error.getMessage() != null && !error.getMessage().isBlank()) message = error.getMessage();
+                if (failures >= 3 || !ProviderRetry.isRetryable(error)) break;
+                try { ProviderRetry.pause(failures); }
+                catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    message = "Tạo audio bị gián đoạn. Hãy thử lại.";
+                    break;
+                }
             }
         }
-        if (generated == null) { review.fail(taskId, message, failures); return; }
+        int retries = Math.max(0, failures - 1);
+        if (generated == null) { review.fail(taskId, message, retries); return; }
         try { review.complete(work, generated, failures); }
-        catch (Exception error) { review.fail(taskId, "Không lưu được kết quả audio. Bản dịch vẫn được giữ; hãy thử lại.", failures); }
+        catch (Exception error) { review.fail(taskId, "Không lưu được kết quả audio. Bản dịch vẫn được giữ; hãy thử lại.", retries); }
     }
 }

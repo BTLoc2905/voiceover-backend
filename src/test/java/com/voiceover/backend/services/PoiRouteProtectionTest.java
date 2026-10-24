@@ -12,10 +12,12 @@ class PoiRouteProtectionTest {
     final PoiRepository pois = mock(PoiRepository.class);
     final RouteStopRepository stops = mock(RouteStopRepository.class);
     final PipelineService pipeline = mock(PipelineService.class);
+    final LanguageRepository languages = mock(LanguageRepository.class);
     final PoiService service = new PoiService(pois, mock(TranslationRepository.class), mock(AudioRepository.class),
-            mock(LanguageRepository.class), stops, pipeline, mock(OpenStreetMapPoiService.class), mock(WikimediaImageService.class), mock(TranslationReviewService.class));
+            languages, stops, pipeline, mock(OpenStreetMapPoiService.class), mock(WikimediaImageService.class), mock(TranslationReviewService.class), mock(PoiThumbnailService.class));
     Poi poi(String status) {
-        Poi poi = Poi.builder().id(1L).name("POI").status(status).latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).build();
+        Poi poi = Poi.builder().id(1L).name("POI").descriptionSource("Mô tả").sourceLanguageCode("vi").status(status).latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).build();
+        when(languages.findById("vi")).thenReturn(Optional.of(Language.builder().code("vi").isActive(true).build()));
         when(pois.findForUpdate(1L)).thenReturn(Optional.of(poi)); return poi;
     }
     @Test void servedPoiCannotBeDeletedHiddenDraftOrLoseCoordinates() {

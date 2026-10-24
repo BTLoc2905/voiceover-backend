@@ -17,7 +17,7 @@ class ReviewAudioWorkerTest {
     }
     @Test void missingProviderFailsHonestlyAndLeavesRetryableState() throws Exception {
         when(service.begin(10L)).thenReturn(work(true)); when(generator.generate(any(),any(),any())).thenThrow(new IllegalStateException("Chưa cấu hình TTS"));
-        worker.generate(10L); verify(generator,times(3)).generate(any(),any(),any()); verify(service).fail(10L,"Chưa cấu hình TTS",3); verify(service,never()).complete(any(),any(),anyInt());
+        worker.generate(10L); verify(generator,times(1)).generate(any(),any(),any()); verify(service).fail(10L,"Chưa cấu hình TTS",0); verify(service,never()).complete(any(),any(),anyInt());
     }
     @Test void unsupportedLanguageNeverCallsTheProvider() throws Exception {
         var job=work(false); when(service.begin(10L)).thenReturn(job); worker.generate(10L);

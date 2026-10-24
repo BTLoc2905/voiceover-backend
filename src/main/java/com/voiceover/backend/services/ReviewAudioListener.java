@@ -11,6 +11,7 @@ import org.springframework.transaction.event.*;
 public class ReviewAudioListener {
     private final ReviewAudioWorker worker;
     private final TranslationReviewService review;
+    private final PipelineService pipeline;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void afterCommit(ReviewAudioRequested event) {
@@ -20,5 +21,13 @@ public class ReviewAudioListener {
         }
     }
     @EventListener(ApplicationReadyEvent.class)
-    public void recover() { review.interruptReviewJobs(); }
+    public void recover() {
+        review.interruptReviewJobs();
+        for (Long taskId : pipeline.requeueInterruptedTasks()) {
+            try { pipeline.resumeTask(taskId); }
+            catch (org.springframework.core.task.TaskRejectedException error) {
+                pipeline.failRecoveredTask(taskId, "Hàng đợi pipeline đang đầy. Hãy lưu lại POI để thử lại.");
+            }
+        }
+    }
 }
