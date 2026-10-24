@@ -1,6 +1,7 @@
 package com.voiceover.backend.controllers;
 
 import com.voiceover.backend.services.RouteConflictException;
+import com.voiceover.backend.services.ContentReviewConflictException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -9,6 +10,10 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class RouteErrorHandler {
+    @ExceptionHandler(ContentReviewConflictException.class)
+    public ResponseEntity<?> reviewConflict(ContentReviewConflictException error) {
+        return ResponseEntity.status(409).body(Map.of("code", "CONTENT_CONFLICT", "message", error.getMessage()));
+    }
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> invalid(IllegalArgumentException error) {
         return ResponseEntity.badRequest().body(Map.of("code", "INVALID_INPUT", "message", error.getMessage()));

@@ -129,24 +129,6 @@ public class VoiceMapController {
         return ResponseEntity.ok(Map.of("message", "Đã xóa POI thành công."));
     }
 
-    // UC07: Gợi ý bản nháp mô tả gốc cho POI bằng AI
-    @PostMapping("/admin/pois/ai-suggest")
-    public ResponseEntity<?> suggestDescription(@RequestBody Map<String, String> payload) {
-        return ResponseEntity.ok(poiService.generateAiDescriptionDraft(
-                payload.get("name"), payload.get("notes")
-        ));
-    }
-
-    // UC09: Kiểm duyệt, chỉnh sửa bản dịch thủ công và chỉ tạo lại Audio cho đúng ngôn ngữ đó
-    @PutMapping("/admin/pois/{poiId}/translations/{langCode}")
-    public ResponseEntity<?> updateTranslationAndRegenerateAudio(
-            @PathVariable Long poiId,
-            @PathVariable String langCode,
-            @RequestBody Map<String, String> body) {
-        pipelineService.regenerateSingleLanguageAudio(poiId, langCode, body.get("content"));
-        return ResponseEntity.ok(Map.of("message", "Đã lưu bản dịch và kích hoạt tạo lại Audio cho ngôn ngữ: " + langCode));
-    }
-
     // UC10: Tạo và lưu Route kèm thứ tự POI (poi_sequence) trong Session
     @PostMapping(value = "/admin/sessions/{sessionId}/routes", params = "name")
     public ResponseEntity<?> createRoute(

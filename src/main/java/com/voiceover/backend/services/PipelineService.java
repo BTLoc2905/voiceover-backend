@@ -16,15 +16,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.Base64;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +31,8 @@ public class PipelineService {
     private final ProtectedTermRepository protectedTermRepo;
     private final PipelineTaskRepository pipelineTaskRepo;
     private final SystemLogRepository systemLogRepo;
+    private final TranslationReviewService reviewService;
+    private final AudioGenerationService audioGenerator;
 
     @Value("${google.cloud.api.key:}")
     private String googleCloudApiKey;
@@ -66,22 +63,8 @@ public class PipelineService {
         List<ProtectedTerm> terms = protectedTermRepo.findAll();
 
         for (Language lang : activeLanguages) {
-            Translation existing = translationRepo.findByPoiIdAndLanguageCode(poi.getId(), lang.getCode()).orElse(null);
-
-            // UC08-A2: Bỏ qua nếu mô tả gốc không thay đổi và đã xử lý COMPLETED
-            if (existing != null && currentHash.equals(existing.getSourceHash()) && "COMPLETED".equals(existing.getStatus())) {
-                continue;
-            }
-
-            PipelineTask task = pipelineTaskRepo.save(PipelineTask.builder()
-                    .poiId(poi.getId())
-                    .targetLanguageCode(lang.getCode())
-                    .taskType("TRANSLATE_TTS")
-                    .status("PROCESSING")
-                    .retryCount(0)
-                    .createdAt(LocalDateTime.now())
-                    .build());
-
+            PipelineTask task = reviewService.reserveTranslation(poi.getId(), lang.getCode(), currentHash);
+            if (task == null) continue;
             processLanguageTranslationAndTts(poi, lang, terms, currentHash, task);
         }
     }
@@ -130,13 +113,7 @@ public class PipelineService {
         }
 
         // Không có key trả bản văn bản để frontend đọc bằng SpeechSynthesis miễn phí.
-        if (googleCloudApiKey.isBlank()) {
-            if (tryGeneratePiperAudio(translation)) {
-                task.setStatus("COMPLETED");
-                task.setFinishedAt(LocalDateTime.now());
-                pipelineTaskRepo.save(task);
-                return;
-            }
+        if (audioGenerator.provider(lang.getCode()).equals("UNAVAILABLE")) {
             Audio textOnlyAudio = audioRepo.findByPoiIdAndLanguageCode(poi.getId(), lang.getCode())
                     .orElse(Audio.builder().poiId(poi.getId()).languageCode(lang.getCode())
                             .translationId(translation.getId()).build());
@@ -152,147 +129,29 @@ public class PipelineService {
         }
 
         // Bước 3: Tổng hợp giọng nói TTS ra file MP3 thật (Thử lại tối đa 3 lần - UC08-E2)
-        generateRealTtsMp3WithRetry(translation, task);
+        generateAudioWithRetry(translation, task);
     }
 
-    @Async("pipelineExecutor")
-    public void regenerateSingleLanguageAudio(Long poiId, String languageCode, String updatedContent) {
-        Translation translation = translationRepo.findByPoiIdAndLanguageCode(poiId, languageCode)
-                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy bản dịch (UC09-E1)"));
-
-        if (updatedContent != null && !updatedContent.isBlank()) {
-            translation.setContent(updatedContent);
-            translation.setManualEdit(true);
-            translation.setStatus("COMPLETED");
-            translation = translationRepo.save(translation);
-        }
-
-        PipelineTask task = pipelineTaskRepo.save(PipelineTask.builder()
-                .poiId(poiId)
-                .targetLanguageCode(languageCode)
-                .taskType("TTS_ONLY")
-                .status("PROCESSING")
-                .retryCount(0)
-                .createdAt(LocalDateTime.now())
-                .build());
-
-        generateRealTtsMp3WithRetry(translation, task);
-    }
-
-    private void generateRealTtsMp3WithRetry(Translation translation, PipelineTask task) {
+    private void generateAudioWithRetry(Translation translation, PipelineTask task) {
         Audio audio = audioRepo.findByPoiIdAndLanguageCode(translation.getPoiId(), translation.getLanguageCode())
-                .orElse(Audio.builder()
-                        .poiId(translation.getPoiId())
-                        .languageCode(translation.getLanguageCode())
-                        .translationId(translation.getId())
-                        .build());
-        audio.setStatus("PROCESSING");
+                .orElse(Audio.builder().poiId(translation.getPoiId()).languageCode(translation.getLanguageCode()).build());
+        audio.setTranslationId(translation.getId()); audio.setStatus("PROCESSING"); audio.setFilePath(null); audio.setDurationSec(null);
         audioRepo.save(audio);
-
         for (int attempt = 1; attempt <= 3; attempt++) {
             try {
-                Path audioDir = Paths.get(audioStorage);
-                Files.createDirectories(audioDir);
-
-                String fileName = "poi_" + translation.getPoiId() + "_" + translation.getLanguageCode() + ".mp3";
-                Path filePath = audioDir.resolve(fileName);
-
-                // Cắt ngắn tối đa 200 ký tự cho Google TTS stream hoặc gọi ElevenLabs nếu có API key
-                String textToSpeak = translation.getContent();
-                if (textToSpeak.length() > 200) {
-                    textToSpeak = textToSpeak.substring(0, 197) + "...";
-                }
-
-                if (googleCloudApiKey.isBlank()) {
-                    throw new IllegalStateException("Thiếu GOOGLE_CLOUD_API_KEY cho Google Cloud TTS.");
-                }
-                String requestBody = "{\"input\":{\"text\":" + objectMapper.writeValueAsString(textToSpeak)
-                        + "},\"voice\":{\"languageCode\":\"" + translation.getLanguageCode()
-                        + "\",\"ssmlGender\":\"NEUTRAL\"},\"audioConfig\":{\"audioEncoding\":\"MP3\"}}";
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create("https://texttospeech.googleapis.com/v1/text:synthesize?key=" + googleCloudApiKey))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                        .build();
-                HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-                if (res.statusCode() / 100 != 2) {
-                    throw new IOException("Google Cloud TTS trả về HTTP " + res.statusCode());
-                }
-                String encodedAudio = objectMapper.readTree(res.body()).path("audioContent").asText(null);
-                if (encodedAudio == null || encodedAudio.isBlank()) {
-                    throw new IOException("Google Cloud TTS không trả về audioContent.");
-                }
-                Files.write(filePath, Base64.getDecoder().decode(encodedAudio));
-
-                int estimatedSeconds = Math.max(8, translation.getContent().split("\\s+").length / 2);
-                audio.setFilePath("/audio/" + fileName);
-                audio.setDurationSec(estimatedSeconds);
-                audio.setStatus("COMPLETED");
-                audioRepo.save(audio);
-
-                task.setStatus("COMPLETED");
-                task.setFinishedAt(LocalDateTime.now());
-                pipelineTaskRepo.save(task);
-                log("pipeline", "INFO", "Đã dịch và xuất file MP3 thành công cho POI " + translation.getPoiId() + " [" + translation.getLanguageCode() + "]");
+                var generated = audioGenerator.generate(translation.getPoiId(), translation.getLanguageCode(), translation.getContent());
+                audio.setFilePath(generated.url()); audio.setDurationSec(generated.durationSec()); audio.setStatus("COMPLETED"); audioRepo.save(audio);
+                task.setStatus("COMPLETED"); task.setRetryCount(attempt - 1); task.setFinishedAt(LocalDateTime.now()); pipelineTaskRepo.save(task);
+                log("pipeline", "INFO", "Đã tạo audio đầy đủ cho POI " + translation.getPoiId() + " [" + translation.getLanguageCode() + "]");
                 return;
-            } catch (Exception e) {
+            } catch (Exception error) {
+                if (error instanceof InterruptedException) Thread.currentThread().interrupt();
                 task.setRetryCount(attempt);
-                if (attempt == 3) {
-                    audio.setStatus("FAILED");
-                    audioRepo.save(audio);
-                    failTask(task, "Tạo audio TTS thất bại sau 3 lần thử: " + e.getMessage());
+                if (attempt == 3 || error instanceof InterruptedException) {
+                    audio.setStatus("FAILED"); audioRepo.save(audio);
+                    failTask(task, "Tạo audio thất bại: " + error.getMessage()); return;
                 }
             }
-        }
-    }
-
-    private boolean tryGeneratePiperAudio(Translation translation) {
-        if (piperExecutable.isBlank() || piperModel.isBlank()) {
-            return false;
-        }
-        Audio audio = audioRepo.findByPoiIdAndLanguageCode(translation.getPoiId(), translation.getLanguageCode())
-                .orElse(Audio.builder()
-                        .poiId(translation.getPoiId())
-                        .languageCode(translation.getLanguageCode())
-                        .translationId(translation.getId())
-                        .build());
-        Path audioDir = Paths.get(audioStorage);
-        Path outputPath = audioDir.resolve(
-                "poi_" + translation.getPoiId() + "_" + translation.getLanguageCode() + ".wav");
-        try {
-            Files.createDirectories(audioDir);
-            Process process = new ProcessBuilder(
-                    piperExecutable,
-                    "--model", piperModel,
-                    "--output_file", outputPath.toString())
-                    .redirectErrorStream(true)
-                    .start();
-            try (var writer = process.outputWriter(StandardCharsets.UTF_8)) {
-                writer.write(translation.getContent());
-                writer.write(System.lineSeparator());
-            }
-            if (!process.waitFor(90, java.util.concurrent.TimeUnit.SECONDS)
-                    || process.exitValue() != 0
-                    || !Files.exists(outputPath)
-                    || Files.size(outputPath) == 0) {
-                process.destroyForcibly();
-                return false;
-            }
-            audio.setFilePath("/audio/" + outputPath.getFileName());
-            audio.setDurationSec(Math.max(8, translation.getContent().split("\\s+").length / 2));
-            audio.setStatus("COMPLETED");
-            audioRepo.save(audio);
-            log("pipeline", "INFO", "Đã tạo audio Piper local cho POI " + translation.getPoiId()
-                    + " [" + translation.getLanguageCode() + "]");
-            return true;
-        } catch (IOException exception) {
-            log("pipeline", "INFO", "Không dùng được Piper local, frontend sẽ dùng Web Speech API: "
-                    + exception.getMessage());
-            return false;
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            log("pipeline", "INFO", "Piper local bị gián đoạn, frontend sẽ dùng Web Speech API.");
-            return false;
         }
     }
 

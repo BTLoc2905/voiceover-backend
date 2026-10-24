@@ -22,6 +22,7 @@ public class PoiService {
     private final PipelineService pipelineService;
     private final OpenStreetMapPoiService openStreetMapPoiService;
     private final WikimediaImageService wikimediaImageService;
+    private final TranslationReviewService reviewService;
 
     // UC01: Tìm các POI đã xuất bản trong bán kính 500m tính từ vị trí GPS hiện tại
     public List<Map<String, Object>> getNearbyPublishedPois(double userLat, double userLng, double maxRadiusMeters) {
@@ -113,31 +114,17 @@ public class PoiService {
         if (!"PUBLISHED".equalsIgnoreCase(poi.getStatus())) throw new IllegalArgumentException("POI này chưa xuất bản hoặc đã tạm ẩn.");
         String defaultLang = languageRepo.findByIsDefaultTrue().map(Language::getCode).orElse("vi");
 
-        boolean fallbackUsed = false;
         String activeLang = requestedLang;
-
-        Optional<Translation> transOpt = translationRepo.findByPoiIdAndLanguageCode(poiId, requestedLang);
-        String builtInNarration = OpenStreetMapPoiService.localizedNarrationFor(poi.getName(), requestedLang);
-        if (builtInNarration != null) {
-            transOpt = Optional.of(Translation.builder()
-                    .poiId(poi.getId())
-                    .languageCode(requestedLang)
-                    .content(builtInNarration)
-                    .status("COMPLETED")
-                    .build());
-            activeLang = requestedLang;
-        } else if (transOpt.isEmpty() || !"COMPLETED".equals(transOpt.get().getStatus())) {
-            if (transOpt.isEmpty() || !"PROCESSING".equals(transOpt.get().getStatus())) {
-                pipelineService.triggerFullPipelineForPoi(poi);
-            }
-            transOpt = translationRepo.findByPoiIdAndLanguageCode(poiId, defaultLang);
+        Optional<Translation> transOpt = completedTranslation(poiId, requestedLang);
+        String builtInNarration = transOpt.isPresent() ? null : availableBuiltIn(poi, requestedLang);
+        if (transOpt.isEmpty() && builtInNarration == null) {
             activeLang = defaultLang;
-            fallbackUsed = true;
+            transOpt = completedTranslation(poiId, defaultLang);
+            builtInNarration = transOpt.isPresent() ? null : availableBuiltIn(poi, defaultLang);
         }
-
-        Optional<Audio> audioOpt = builtInNarration != null
-                ? Optional.empty()
-                : audioRepo.findByPoiIdAndLanguageCode(poiId, activeLang);
+        boolean fallbackUsed = !Objects.equals(activeLang, requestedLang);
+        String textContent = transOpt.map(Translation::getContent).orElse(builtInNarration == null ? poi.getDescriptionSource() : builtInNarration);
+        Optional<Audio> audioOpt = transOpt.isPresent() ? audioRepo.findByPoiIdAndLanguageCode(poiId, activeLang) : Optional.empty();
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("poiId", poi.getId());
@@ -146,18 +133,29 @@ public class PoiService {
         response.put("requestedLanguage", requestedLang);
         response.put("activeLanguage", activeLang);
         response.put("fallbackUsed", fallbackUsed);
-        response.put("textContent", transOpt.map(Translation::getContent).orElse(poi.getDescriptionSource()));
-        response.put("audioUrl", audioOpt.map(Audio::getFilePath).orElse(null));
+        response.put("textContent", textContent);
+        response.put("audioUrl", audioOpt.filter(audio -> "COMPLETED".equals(audio.getStatus())).map(Audio::getFilePath).filter(path -> !path.isBlank()).orElse(null));
         response.put("audioStatus", audioOpt.map(Audio::getStatus).orElse("TEXT_ONLY"));
         response.put("browserTtsAllowed", languageRepo.findById(activeLang).map(Language::isTtsSupported).orElse(false));
         return response;
+    }
+
+    private Optional<Translation> completedTranslation(Long poiId, String language) {
+        return translationRepo.findByPoiIdAndLanguageCode(poiId, language)
+                .filter(text -> "COMPLETED".equals(text.getStatus()) && text.getContent() != null && !text.getContent().isBlank());
+    }
+    private String availableBuiltIn(Poi poi, String language) {
+        return Set.of("Đại học Sài Gòn", "Công viên 23 tháng 9", "Chợ An Đông", "Nhà thờ Chợ Quán").contains(poi.getName())
+                ? OpenStreetMapPoiService.localizedNarrationFor(poi.getName(), language) : null;
     }
 
     // UC06 & UC08: Tạo mới hoặc cập nhật POI và kích hoạt Pipeline tự động
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Poi saveOrUpdatePoi(Poi poiRequest) {
         if (poiRequest.getId() != null) {
-            poiRepo.findForUpdate(poiRequest.getId()).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
+            Poi previous = poiRepo.findForUpdate(poiRequest.getId()).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
+            if (!Objects.equals(previous.getDescriptionSource(), poiRequest.getDescriptionSource())
+                    || !Objects.equals(previous.getSourceLanguageCode(), poiRequest.getSourceLanguageCode())) reviewService.assertSourceEditable(poiRequest.getId());
             if (!RouteSessionService.published(poiRequest.getStatus()) || !RouteSessionService.hasValidCoordinates(poiRequest)) rejectServingRoutes(poiRequest.getId());
         }
         if (poiRequest.getSourceLanguageCode() == null || poiRequest.getSourceLanguageCode().isBlank()) {
@@ -167,7 +165,11 @@ public class PoiService {
             poiRequest.setRadiusM(50);
         }
         Poi saved = poiRepo.save(poiRequest);
-        pipelineService.triggerFullPipelineForPoi(saved);
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                @Override public void afterCommit() { pipelineService.triggerFullPipelineForPoi(saved); }
+            });
+        } else pipelineService.triggerFullPipelineForPoi(saved);
         return saved;
     }
 
@@ -188,24 +190,6 @@ public class PoiService {
 
     private String routeNames(List<Route> routes) {
         return routes.stream().map(route -> "'" + route.getName() + "' (#" + route.getId() + ")").collect(Collectors.joining(", "));
-    }
-
-    // UC07: Gợi ý bản nháp mô tả gốc bằng AI (Không tự động lưu vào CSDL)
-    public Map<String, String> generateAiDescriptionDraft(String poiName, String notes) {
-        if (poiName == null || poiName.isBlank()) {
-            throw new IllegalArgumentException("Tên POI là bắt buộc để AI gợi ý mô tả (UC07).");
-        }
-        String draft = String.format(
-            "%s là một điểm tham quan văn hóa - lịch sử tiêu biểu. %s " +
-            "Tại đây, du khách sẽ được chiêm ngưỡng kiến trúc độc đáo và lắng nghe những câu chuyện lịch sử sống động gắn liền với địa danh này.",
-            poiName.trim(),
-            (notes != null && !notes.isBlank()) ? "Đặc điểm nổi bật: " + notes.trim() + "." : ""
-        );
-        return Map.of(
-            "poiName", poiName,
-            "draftDescription", draft,
-            "notice", "Bản nháp do AI tạo. Vui lòng kiểm tra và nhấn 'Lưu' để chính thức áp dụng và kích hoạt Pipeline (UC07)."
-        );
     }
 
     public static double calculateHaversineMeters(double lat1, double lon1, double lat2, double lon2) {

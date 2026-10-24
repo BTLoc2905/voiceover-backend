@@ -13,7 +13,7 @@ class PoiRouteProtectionTest {
     final RouteStopRepository stops = mock(RouteStopRepository.class);
     final PipelineService pipeline = mock(PipelineService.class);
     final PoiService service = new PoiService(pois, mock(TranslationRepository.class), mock(AudioRepository.class),
-            mock(LanguageRepository.class), stops, pipeline, mock(OpenStreetMapPoiService.class), mock(WikimediaImageService.class));
+            mock(LanguageRepository.class), stops, pipeline, mock(OpenStreetMapPoiService.class), mock(WikimediaImageService.class), mock(TranslationReviewService.class));
     Poi poi(String status) {
         Poi poi = Poi.builder().id(1L).name("POI").status(status).latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).build();
         when(pois.findForUpdate(1L)).thenReturn(Optional.of(poi)); return poi;

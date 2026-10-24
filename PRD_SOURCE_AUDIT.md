@@ -1,121 +1,303 @@
-# Đối chiếu PRD VoiceMap với mã nguồn hiện tại
+# VoiceMap — Đối chiếu PRD và bàn giao phần việc còn lại
 
-## Cập nhật UC02 GPS ngày 23/10/2026
+**Cập nhật: 24/10/2026.** Nguồn yêu cầu: [Nhom2_CNPM.docx](./Nhom2_CNPM.docx), đặc biệt F-01–F-06 và UC01–UC11. Session/Routes/GPS đối chiếu commit **7c71eea** trên nhánh **feat/session-routes-gps-7c71eea**; UC09 được triển khai thêm trong working tree và chưa commit.
 
-Xem [UC02_GPS_IMPLEMENTATION.md](./UC02_GPS_IMPLEMENTATION.md) cho thay đổi mới nhất: GPS liên tục, dwell/hysteresis/cooldown, hàng đợi, bộ phát chung và sự kiện nghe thực sự bắt đầu. Nghe thủ công bằng giọng trình duyệt đã tồn tại và được người dùng xác nhận. Các kết luận thiếu tự phát, GPS một lần và audio bên dưới là ảnh chụp lịch sử trước lượt bổ sung này; trạng thái nghiệm thu runtime mới nằm trong tài liệu UC02.
+**Báo cáo này thay toàn bộ bản khảo sát cũ.** Không tiếp tục dùng các kết luận cũ như “chưa có GPS tự phát”, “chưa có giao diện Session/Route”, “chưa kết nối được MySQL” hoặc “chưa có test”: các phần đó đã thay đổi. PRD Word gốc được giữ nguyên.
 
-## Phạm vi Session & Routes được duyệt ngày 23/10/2026
+## 1. Cách đọc và phạm vi bàn giao
 
-Yêu cầu gốc UC10/F-02/F-05, 10 điều chỉnh được người dùng duyệt, API, migration V12 và bằng chứng kiểm chứng của lượt triển khai Session/Routes được ghi riêng tại [SESSION_ROUTES_REQUIREMENTS.md](./SESSION_ROUTES_REQUIREMENTS.md). Khách xem và bắt đầu dẫn đường thuộc **UC04**; tùy chỉnh thuộc **UC03**. Các bảng khảo sát bên dưới là lịch sử, không phải kết luận nghiệm thu lượt triển khai này.
+- **Đã kiểm lõi:** chức năng chính đã có UI/API và đã kiểm chứng trong phạm vi ghi rõ; không đồng nghĩa hoàn thành mọi tiêu chí phi chức năng của PRD.
+- **Có một phần:** đã có mã hoặc đã chạy được một số nhánh, vẫn còn thiếu luồng hoặc có lỗi cần sửa.
+- **Chưa hoàn thiện:** API mẫu/khung xử lý chưa đủ để người dùng thực hiện use case từ đầu đến cuối.
+- **Chưa kiểm chứng:** cần thử bằng thiết bị, dịch vụ hoặc môi trường thật; không tự đánh đồng với “chưa có code”.
 
-## Cập nhật lượt 1A — tạo/sửa POI (23/10/2026)
+Tài liệu phản ánh mã hiện tại, gồm UC09 vừa triển khai và giới hạn kiểm chứng ghi riêng bên dưới. Không tính phần trăm hoàn thành vì độ lớn các use case khác nhau.
 
-Giữ nguyên bảng mục 3 như **mốc khảo sát ban đầu**. Lượt này chỉ xét tạo/sửa POI theo UC06; chưa làm upload ảnh, chọn vị trí trên bản đồ, ẩn/xóa hoặc mở rộng pipeline.
+**Yêu cầu giữ nguyên khi nhận việc:**
 
-| Hạng mục | Trạng thái sau sửa | Bằng chứng và giới hạn |
-|---|---|---|
-| Form tạo/sửa | Đã bổ sung ở mức mã | [PoiManagement](./voiceover-frontend/src/AdminPortal.jsx#L68) đã có form, điền POI hiện tại khi Sửa, POST và tải lại danh sách. Lượt này thêm chọn ngôn ngữ gốc từ danh mục active, kiểm tên/mô tả/tọa độ/bán kính, báo kết quả tạo/sửa. Chưa kiểm giao diện với backend mã mới. |
-| API và lưu | Đã bổ sung ở mức mã | [saveOrUpdatePoi](./src/main/java/com/voiceover/backend/services/PoiService.java#L111) kiểm trường cụ thể, từ chối bán kính không hợp lệ và ID sửa không tồn tại, giữ cùng ID khi cập nhật; [savePoi](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L132) trả HTTP 400 kèm thông báo validation. JPA save và pipeline sau commit đã có từ trước. Chưa kiểm ghi/đọc lại MySQL thật. |
-| POI nháp ở API công khai | Có xử lý trong mã, chưa kiểm DB thật | [getNearbyPublishedPois](./src/main/java/com/voiceover/backend/services/PoiService.java#L22) chỉ lấy `PUBLISHED`; [getPoiAudioGuide](./src/main/java/com/voiceover/backend/services/PoiService.java#L55) từ chối draft/hidden. |
+1. Tùy chỉnh Route thuộc **UC03**; xem Route và bắt đầu dẫn đường thuộc **UC04**.
+2. Người dùng đã xác nhận nghe thuyết minh thủ công được. Không ghi “chưa có audio” chỉ vì một POI đang dùng giọng trình duyệt.
+3. Chưa mở rộng phần quyền theo yêu cầu của người dùng. Ghi nhận hạn chế xác thực/bảo vệ API tại mục 7, không tự đưa thành việc đầu tiên chặn mọi use case.
+4. Không làm lại UC03 và phạm vi Session/Routes đã nghiệm thu. Chỉ bổ sung các nhánh còn thiếu được liệt kê.
+5. Các ngưỡng GPS, dwell, cooldown, bán kính tải trước là yêu cầu PRD; các điều chỉnh giao diện và quy tắc xuất bản được ghi riêng tại mục 5.
 
-Trước khi người dùng yêu cầu dừng kiểm thử, Maven verify trên bản sao tạm và frontend build đã thành công; test API validation HTTP 400 cũng chạy qua riêng. **Đó là build/test, không phải xác minh lưu dữ liệu thực tế.** Shell kiểm thử không có biến kết nối MySQL; backend cổng 8080 khởi động trước khi mã hiện tại được biên dịch và thiếu endpoint hiện có trong source, nên chưa dùng nó để kết luận luồng 1A. Không chạy migration, không xóa/reset/ghi dữ liệu DB và chưa commit. Nghiệm thu lưu thật, sửa rồi đọc lại, và kiểm draft trên DB được ghi **chưa kiểm tra được**. Phần nhỏ tiếp theo đề xuất: upload thumbnail POI (1B) theo UC06.
+## 2. Tổng quan theo từng use case
 
-> **Cập nhật triển khai 23/10/2026:** Bảng trạng thái ở mục 3 là **mốc khảo sát ban đầu tại commit ghi dưới đây**, trước các sửa đổi đang nằm trong working tree. Không được đọc các hàng “chưa triển khai/một phần” ở đó như kết quả chạy E2E mới. Trạng thái sau sửa và kiểm chứng được ghi ngay bên dưới. Không có thay đổi schema hoặc dữ liệu MySQL do lần kiểm tra này.
-
-## Tiến độ sau mốc đối chiếu (working tree, 23/10/2026)
-
-| Nhóm / yêu cầu liên quan | Thay đổi có bằng chứng | Kiểm chứng hiện có | Còn thiếu trước khi đánh dấu đáp ứng |
+| Use case trong PRD | Trạng thái hiện tại | Đã có | Còn thiếu / chưa đủ để kết luận hoàn tất |
 |---|---|---|---|
-| P0-1 / cấu hình MySQL | [application.properties](./src/main/resources/application.properties#L8) nhận biến môi trường, `ddl-auto=validate`, Flyway mặc định tắt; [maven.yml](./.github/workflows/maven.yml#L1) bật Flyway cho CI riêng | Backend cũ được người dùng khởi động và trả HTTP 200 từ API quản trị; chứng tỏ có kết nối DB, chưa chứng minh bản mã mới chạy. Maven verify trên bản sao tạm thành công | Khởi động lại backend từ source mới với biến của terminal người dùng, xác nhận Hibernate validate và endpoint đọc; đối chiếu schema read-only |
-| P0-2 / đăng nhập quản trị | [AdminAccessInterceptor](./src/main/java/com/voiceover/backend/security/AdminAccessInterceptor.java#L15), [AppConfig](./src/main/java/com/voiceover/backend/config/AppConfig.java#L39), [adminLogin](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L98), [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L1): phiên server, BCrypt, logout, cookie; không chia quyền ADMIN/STAFF theo yêu cầu hiện tại của người dùng | MockMvc và build đã chạy qua ở lượt trước. Tiến trình 8080 có `/api/admin/auth/me` trả 404 dù source hiện tại định nghĩa endpoint này; thời điểm khởi động trước bản class mới. HTTP 200 của một API đơn lẻ không được dùng làm căn cứ phiên bản | Chạy mã mới với cấu hình MySQL/tài khoản kiểm thử, kiểm login sai/đúng, Portal/Dashboard, logout và phiên cũ; chưa kiểm runtime mới |
-| P0-3 / POI gần | [getNearbyPublishedPois](./src/main/java/com/voiceover/backend/services/PoiService.java#L22) lọc POI published tối đa 500 m, không tự tạo POI; [VoiceMapScreens](./voiceover-frontend/src/VoiceMapScreens.jsx#L466) gọi radius 500 | 2 test Haversine ở [PoiServiceTest](./src/test/java/com/voiceover/backend/services/PoiServiceTest.java#L25) qua; build qua | Restart, kiểm API với tọa độ có dữ liệu; GPS vẫn chỉ lấy một lần, chưa có tự phát |
-| P0-4 / audio | [getPoiAudioGuide](./src/main/java/com/voiceover/backend/services/PoiService.java#L53) chỉ trả POI published, bản dịch/audio lưu thật, text-only và fallback; [generateRealTtsMp3WithRetry](./src/main/java/com/voiceover/backend/services/PipelineService.java#L182) không còn cắt 200 ký tự; [AudioScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L282) chỉ phát file và báo thiếu audio. GET guide không còn ghi usage; event được gửi khi bắt đầu/kết thúc phát qua [recordPlaybackEvent](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L57) | 3 test guide mới ở [PoiServiceTest](./src/test/java/com/voiceover/backend/services/PoiServiceTest.java#L55) qua; tổng 9 test, 0 lỗi; frontend build qua | Restart, kiểm URL file/audio content type và phát thực trên dữ liệu có file; kiểm TTS văn bản dài với provider/key riêng. Chưa chứng minh E2E và giới hạn đầu vào của TTS provider |
+| **UC01 — Định vị GPS và xem bản đồ POI lân cận** | Có lõi; còn hoàn thiện tính nhất quán | GPS liên tục; hiển thị vị trí/sai số; catalog chỉ POI xuất bản và tọa độ hợp lệ; danh sách 500 m kèm khoảng cách; bản đồ xem toàn bộ POI đã xuất bản, nút căn khung, cụm điểm trùng tọa độ; có thể chọn nghe trên marker | API nearby cũ vẫn không lọc bán kính và còn tự ghi/bổ sung dữ liệu; danh mục ngôn ngữ phía khách đang viết cố định; cần cảnh báo GPS yếu gọn trong giao diện mới, thử từ chối quyền/mất GPS trên thiết bị thật. Xem **T08** |
+| **UC02 — Nghe và điều khiển thuyết minh đa ngôn ngữ** | Có lõi đã kiểm; chưa đủ toàn bộ audio/SLA | Nghe thủ công đã được người dùng xác nhận; một bộ phát chung cho file audio/giọng trình duyệt; tự phát khi đủ 3 giây, sai số ≤30 m, bán kính POI; hysteresis +20 m, cooldown 30 phút, ưu tiên gần nhất/hàng đợi; tải trước trong 300 m; pause/resume, tốc độ, bỏ qua; fallback/text-only có xử lý; usage start/end đã kiểm API/MySQL | Chưa nghiệm thu GPS/giọng đọc/độ trễ và file TTS provider thật trên thiết bị; tua giọng trình duyệt chỉ ước tính. Xem **T01, T02, T08, T10** |
+| **UC03 — Tùy chỉnh lộ trình cá nhân** | **Đã kiểm lõi** | Thêm/bớt, lên/xuống; 2–10 POI xuất bản, tọa độ hợp lệ, không trùng; backend kiểm quy tắc; tính lại geometry/quãng đường/thời gian đi bộ; chỉ lưu lựa chọn đã xác nhận; khôi phục trên trình duyệt | Route cá nhân hiện lưu localStorage, không phải bản ghi Route Admin hay đồng bộ nhiều thiết bị; kéo thả và offline đầy đủ đã được để sau. Xem [UC03_IMPLEMENTATION.md](./UC03_IMPLEMENTATION.md) |
+| **UC04 — Xem Route và bắt đầu dẫn đường** | Có một phần, cần tiếp tục | Route public đúng điều kiện xuất bản; xem thứ tự, tổng quãng đường/thời gian; start và chặng đi bộ từ GPS qua Directions thật; vị trí cập nhật; khi lỗi vẫn còn POI đích; có nghe, bỏ qua, điểm tiếp theo và kết thúc bằng nút | Chưa tự chuyển chặng/tự kết thúc khi đến POI; trạng thái “đã vào bán kính” hiện chỉ dựa khoảng cách, chưa dùng đủ điều kiện GPS tốt/cũ; tính lại chặng theo vị trí chưa phải phát hiện lệch polyline có tiêu chí rõ. Xem **T05** |
+| **UC05 — Đăng nhập hệ thống** | Có đăng nhập cơ bản; chưa đủ phiên đăng nhập theo PRD | Form email/mật khẩu, đối chiếu tài khoản ACTIVE và BCrypt; hiển thị Portal; đăng xuất phía trình duyệt | Login trả profile và frontend lưu localStorage; chưa có phiên/token server, kiểm tra phiên trên API hoặc thu hồi phiên server. Phần quyền đang hoãn theo yêu cầu; xem **mục 7**, không coi login UI là đã bảo vệ API |
+| **UC06 — Quản lý POI** | Có CRUD cơ bản; còn thiếu nhập liệu/kiểm tra | UI tạo/sửa, trạng thái Nháp/Xuất bản/Ẩn; tọa độ nhập tay, bán kính, URL thumbnail, mô tả; xác nhận xóa; lưu JPA; backend chặn sửa/ẩn/xóa làm hỏng Route đang phục vụ và nêu Route ảnh hưởng | Chưa chọn vị trí trên map, chưa upload thumbnail thật; form chưa có chọn ngôn ngữ gốc; validation backend cho POI độc lập chưa đầy đủ; cần kiểm đầy đủ tạo/sửa/ẩn/xóa rồi đọc lại DB. Xem **T06** |
+| **UC07 — Gợi ý mô tả POI bằng AI** | **Chưa hoàn thiện; mới có endpoint mẫu** | Endpoint nhận tên/ghi chú, trả mô tả nháp mà không lưu DB | Nội dung hiện là String.format theo mẫu, chưa gọi AI sinh mô tả; form chưa có nút nhận/chỉnh/hủy bản nháp AI; chưa có timeout 15 giây và thử lỗi đúng luồng. API tạo ảnh ở service khác không thay thế UC07. Xem **T04** |
+| **UC08 — Pipeline dịch và tạo audio tự động** | Có khung; vẫn còn việc pipeline toàn phần | Async executor, danh mục ngôn ngữ từ DB, protected terms, source hash, bản dịch/audio/task/log; Google TTS ghép WAV đủ văn bản và Piper/text-only; job UC09 phát sau commit, chống trùng theo POI/ngôn ngữ và phục hồi task UC09 dở khi restart | Dịch source language trong pipeline toàn phần vẫn mặc định vi; cơ chế phục hồi/retry task của pipeline toàn phần và nhánh TTS lỗi khi translation hash cũ chưa được giải quyết đầy đủ; chưa nghiệm thu provider thật nhiều ngôn ngữ. Xem **T01–T02** |
+| **UC09 — Kiểm duyệt và hiệu chỉnh bản dịch/audio** | **Đã có lõi UI/API; đã đọc DB thật sau restart** | Chọn POI/ngôn ngữ; xem mô tả gốc, bản dịch, audio/task/lỗi; lưu riêng bản dịch một ngôn ngữ; tạo lại từ nội dung đã lưu; revision, polling, task/retry; API trả 6 POI, mỗi POI có 16 bản dịch hoàn tất | Chưa ghi bản sửa mới lên MySQL. Hiện 14 ngôn ngữ có cờ TTS nhưng provider UNAVAILABLE; audio cả 16 ngôn ngữ/POI là TEXT_ONLY. Cần cấu hình Google/Piper để nghiệm thu file mới khách nghe được. Không có migration. Xem [UC09_IMPLEMENTATION.md](./UC09_IMPLEMENTATION.md) |
+| **UC10 — Quản lý Session và Route** | **Đã kiểm phạm vi được duyệt** | Tạo/sửa Session, Route, nháp dở, xuất bản có kiểm tra; thêm/bớt/lên/xuống; marker đánh số đồng bộ danh sách; preview đi bộ, quãng đường/thời gian, coverage ngôn ngữ/audio; public lọc cả Session và Route; chặn phá Route; lưu thật và còn sau restart | Không đồng nhất với hoàn tất UC04 tự chuyển chặng hoặc UC09 kiểm duyệt audio. Kéo thả/offline đầy đủ để sau; tạm đóng bằng về Nháp. Xem [SESSION_ROUTES_REQUIREMENTS.md](./SESSION_ROUTES_REQUIREMENTS.md) |
+| **UC11 — Giám sát và thống kê sử dụng** | Có dashboard đếm cơ bản; còn phần lớn monitoring PRD | Tổng POI, POI xuất bản, tổng client từng ghi nhận, lượt nghe theo POI; polling 10 giây; start/end ghi qua API thật và loại preload khỏi số lượt | Thiếu trạng thái App/DB/Pipeline thật, số task chờ/xử lý/lỗi, error rate, response time, lỗi gần nhất; active users theo cửa sổ thời gian, theo ngôn ngữ, tỷ lệ auto/tap, Route phổ biến; nhãn “System operational” đang tĩnh; polling 10 giây chưa chứng minh SLA ≤10 giây. Xem **T07** |
 
-**Thứ tự chặn hiện tại:** (1) restart backend với cấu hình MySQL hiện có để nạp bản mới; (2) kiểm auth và API POI/guide chỉ đọc; (3) kiểm file audio thực nếu có; (4) mới triển khai và thử các nhánh pipeline, GPS tự phát, session/route còn thiếu. Backend hiện chạy bản cũ nên không dùng kết quả HTTP 200 của nó để xác nhận bản sửa. Bộ test chạy trên bản sao source trong thư mục tạm; không ghi vào database. Các file `target/` đã có thay đổi từ phiên chạy trước, được giữ nguyên.
+### Những phần bạn nhận việc không cần làm lại
 
-Ngày đánh giá: 23/10/2026. Nguồn yêu cầu: [Nhom2_CNPM.docx](./Nhom2_CNPM.docx), bản 1.0. Bản mã nguồn: commit `d17a9640afea4836df12fc5a3a1267cc0f02033d`; các thay đổi sẵn có chỉ nằm trong `target/` (lớp biên dịch và migration đã copy). Báo cáo dựa trên mã nguồn văn bản đang có, không dùng checklist tiến độ trong README để thay thế bằng chứng. Không tính phần trăm hoàn thành vì mỗi hàng có độ lớn và mức độ tích hợp khác nhau.
+- Lõi UC03 thêm/bớt/đổi thứ tự và tính lại Route đi bộ.
+- Lõi GPS tự phát, hàng đợi, chống chồng tiếng và cooldown của UC02.
+- Toàn bộ phạm vi Admin Session/Routes đã được duyệt, trừ khi phát hiện lỗi hồi quy cụ thể.
+- Việc ghi start/end và loại GET preload khỏi lượt nghe đã có. Khi mở rộng thống kê cần dùng lại dữ liệu/sự kiện này.
+- Bản đồ khám phá hiển thị POI xuất bản và cụm trùng tọa độ đã có; danh sách gần bạn vẫn 500 m.
 
-**Quy ước bằng chứng:** **Đọc mã** chỉ chứng minh có/không có đường đi xử lý trong phiên bản này; **Build** chỉ chứng minh biên dịch/đóng gói; **Chạy UI** chứng minh quan sát trên giao diện; **Chưa thử E2E** nghĩa là chưa kiểm tra luồng với database và dịch vụ ngoài. “Đã đáp ứng” chỉ dùng khi yêu cầu có bằng chứng đủ mạnh cho chính phạm vi hàng đó, không mặc nhiên chứng minh hiệu năng/vận hành. Các dòng “chưa triển khai” căn cứ entry point thực tế và tìm toàn bộ nguồn liên quan, không căn cứ giao diện demo không được mount.
+## 3. Các điểm kỹ thuật cần biết trước khi nhận việc
 
-## 1. Phạm vi yêu cầu, vai trò và luồng
+### 3.1. UI mới và API nearby cũ đang không đồng nhất
 
-PRD mô tả **du khách** không tài khoản: mở ứng dụng, chọn ngôn ngữ, cấp GPS, xem POI đã xuất bản trong 500 m, nghe bằng chạm/tự phát, điều khiển audio; chọn/tùy chỉnh lộ trình và đi theo chỉ dẫn (F-01, F-02, UC01–UC04, Us-01–09). **Admin/nhân viên** đăng nhập, quản lý POI/ảnh/session/route, tạo bản nháp AI, xem/sửa bản dịch và audio; hệ thống xử lý dịch/TTS nền (F-03–05, FR-07, UC05–UC10, Us-10–13,16). **Admin giám sát** xem trạng thái, lỗi và sử dụng được cập nhật tối đa 10 giây (F-06, UC11, Us-14–15). Dữ liệu chính gồm `language`, `poi`, `translation`, `audio`, `pipeline_task`, `session`, `route`, `route_stop`, `admin_account`, `protected_term`, `usage_event`; log/metric là kho giám sát riêng theo mục 3.4. Phi chức năng: giới hạn độ trễ audio/AI, độ chính xác GPS, uptime, cách ly lỗi bên thứ ba, kiến trúc 3 lớp/Docker/CI (mục 2.4).
+Màn khách đang dùng GET /api/public/pois rồi tính Haversine/lọc danh sách 500 m ở frontend. Nó không gọi GET /api/public/pois/nearby.
 
-## 2. Khảo sát hệ thống và khả năng chạy
+Trong [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), getNearbyPublishedPois vẫn duyệt mọi POI xuất bản mà không áp maxRadiusMeters; còn refresh nội dung/ảnh, lưu và bổ sung dữ liệu mẫu khi ít điểm. Vì vậy không được kết luận API nearby đã đúng chỉ vì UI mới lọc đúng. T08 phải sửa API này mà vẫn giữ bản đồ xem toàn bộ POI theo điều chỉnh người dùng.
 
-Backend là Java 21 theo [pom.xml](./pom.xml) (Spring Boot 4.1.1, JPA, MySQL, Flyway, Maven Wrapper), phân tầng `Controller → Service → Repository`, có 11 migration V1–V11, [Dockerfile](./Dockerfile) và [CI Maven](./.github/workflows/maven.yml). Frontend đang chạy thực tế là React 19/Vite 8/Leaflet trong [main.jsx](./voiceover-frontend/src/main.jsx#L4), điều hướng bằng pathname sang [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L106) hoặc [VoiceMapScreens](./voiceover-frontend/src/VoiceMapScreens.jsx#L525). Không thấy dự án React Native. [VoiceMapDemoApp.jsx](./voiceover-frontend/src/VoiceMapDemoApp.jsx#L24) chứa dữ liệu mẫu và logic mô phỏng nhưng không được import vào entry point; không ghi nhận nó là chức năng đang sử dụng. Proxy Vite chuyển `/api` đến cổng 8080 tại [vite.config.js](./voiceover-frontend/vite.config.js#L7).
+### 3.2. Nghe được bằng trình duyệt khác với có MP3 hoàn chỉnh trong kho file
 
-**Kiểm chứng đã chạy:** `mvnw.cmd -o -B verify` trên bản sao source trong thư mục tạm **BUILD SUCCESS**, biên dịch 34 file Java, **No tests to run** (không có file trong `src/test/` của source hiện tại). `npm run build -- --outDir <temp>` **thành công**; `npm run lint` thoát mã 0 nhưng có **17 cảnh báo**. Runtime là Java 24 (khác Java 21 trong PRD/CI). Khởi động JAR trên cổng 18080/18081 với Flyway tắt, Hibernate `ddl-auto=none`, pool read-only **thất bại**: MySQL 3306 từ chối cả `root/root` mặc định của [application.properties](./src/main/resources/application.properties#L5) và `voiceover/voiceover` từ [CI](./.github/workflows/maven.yml#L39); chưa có biến `SPRING_DATASOURCE_*` hay `DB_*`. Không kiểm tra hoặc sửa schema/dữ liệu DB hiện hữu. UI ở `localhost:5173` render bản đồ, nhưng request POI qua proxy trả 502 và màn hình báo “Backend không trả về danh sách POI”. Vì vậy không có luồng nghiệp vụ nào được chứng minh chạy E2E ở lần đánh giá này.
+- Giọng đọc trình duyệt đã hoạt động; giữ chức năng đó.
+- [AudioGenerationService.java](./src/main/java/com/voiceover/backend/services/AudioGenerationService.java) đã chia văn bản và tạo WAV phiên bản mới đủ nội dung; test dùng HTTP stub/local, chưa thay thế kiểm Google/Piper thật.
+- [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java) ưu tiên translation/audio DB hoàn tất; built-in chỉ còn là fallback có giới hạn cho một số POI.
+- FilePath không rỗng chưa đủ: phải kiểm trạng thái COMPLETED, URL trả được file thực và nội dung được đọc đủ.
+- Catalog có 16 ngôn ngữ active, 14 có cờ ttsSupported; cờ cấu hình không chứng minh thiết bị có giọng đọc hoặc đã sinh file cho toàn bộ ngôn ngữ.
 
-## 3. Bảng đối chiếu
+### 3.3. API đã nhận yêu cầu không có nghĩa tác vụ async đã thành công
 
-Các mã `VM-*` được gán cho từng yêu cầu có thể giao/kiểm thử; tham chiếu F/FR/Us/UC trong ngoặc là mã PRD. “Chưa xác minh” chỉ dùng khi code hoặc chỉ số có tồn tại nhưng môi trường không đủ để kết luận hành vi thực tế. Cột cuối là phép thử cần thực hiện trên DB thử nghiệm và dịch vụ tương ứng. Tất cả bằng chứng code trong bảng là **đọc mã**, trừ khi ghi riêng **Build** hoặc **Chạy UI**.
+regenerateSingleLanguageAudio chạy async, nên thông báo HTTP hiện tại không bảo đảm đã lưu/sinh audio xong. Cần tách “đã nhận tác vụ”, “đang xử lý”, “hoàn tất”, “lỗi” và có cách đọc trạng thái thật. Áp dụng tương tự việc lưu POI rồi kích hoạt pipeline trong transaction.
 
-| Mã yêu cầu | Yêu cầu PRD | Trạng thái | Bằng chứng trong code | Phần còn thiếu | Cách kiểm chứng |
-|---|---|---|---|---|---|
-| VM-01 (Us-09, UC01) | Du khách dùng không đăng nhập | Đáp ứng một phần | [main.jsx](./voiceover-frontend/src/main.jsx#L9) `createRoot`; [VoiceMapScreens](./voiceover-frontend/src/VoiceMapScreens.jsx#L525); public endpoint [getNearbyPois](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L36). **Build, Chạy UI** | UI mở không login; luồng đến lần nghe đầu chưa E2E | Mở app sạch rồi nghe POI mà không có tài khoản |
-| VM-02 (Us-01, UC01, F-01) | GPS cập nhật, bản đồ và POI đã xuất bản trong 500 m kèm khoảng cách | Đáp ứng một phần | [VoiceMapScreens](./voiceover-frontend/src/VoiceMapScreens.jsx#L540) dùng `getCurrentPosition` một lần, gửi `radiusM=5000` dòng 557; [getNearbyPublishedPois](./src/main/java/com/voiceover/backend/services/PoiService.java#L27) tính Haversine nhưng không lọc `maxRadiusMeters`; [createSaigonUniversityFallback](./src/main/java/com/voiceover/backend/services/OpenStreetMapPoiService.java#L329) không lọc vị trí. **Chạy UI:** API 502 | Chưa theo dõi liên tục, lọc 500 m, không tự sinh POI ngoài tầm | Seed POI cách 100/600 m, di chuyển GPS giả lập; chỉ 100 m xuất hiện và khoảng cách cập nhật |
-| VM-03 (F-01, UC02) | Tự phát theo bán kính POI, GPS ≤30 m, ở trong ≥3 s, rời vùng +20 m, cooldown 30 phút, gần nhất/hàng đợi | Chưa triển khai | [VoiceMapScreens](./voiceover-frontend/src/VoiceMapScreens.jsx#L525) chỉ chọn màn hình; [AudioScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L282) mở khi bấm; `AUTO_PLAY` chỉ là tên event ở [getPoiGuide](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L49). Demo tách biệt [VoiceMapDemoApp](./voiceover-frontend/src/VoiceMapDemoApp.jsx#L93) | Toàn bộ state machine tự phát thật; xử lý chặn autoplay, độ chính xác và chồng lấn | Mô phỏng chuỗi GPS và thời gian, đo event/audio, thử hai POI chồng vùng |
-| VM-04 (Us-03, UC02) | Chạm POI xem thẻ ảnh/mô tả và nghe | Đáp ứng một phần | [NearbyScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L263) card mở AudioScreen; [getPoiAudioGuide](./src/main/java/com/voiceover/backend/services/PoiService.java#L111) trả text/URL; marker Leaflet chỉ `bindPopup` tên/khoảng cách tại [MapArtwork](./voiceover-frontend/src/VoiceMapScreens.jsx#L158) | Chạm trực tiếp marker chưa mở thẻ đầy đủ/nút phát; audio URL chưa thông | Chạm marker và card, xác nhận ảnh/text, phát nội dung đúng |
-| VM-05 (Us-04, UC02) | 15+ ngôn ngữ, đổi đồng loạt; thiếu audio dùng tiếng mặc định và báo rõ; text-only không phát | Đáp ứng một phần | [V4 seed](./src/main/resources/db/migration/V4__seed_languages.sql#L2) có 16 ngôn ngữ; [NearbyScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L226) hard-code 16; [getPoiAudioGuide](./src/main/java/com/voiceover/backend/services/PoiService.java#L111) fallback khi thiếu **translation**, không khi thiếu **audio**; [togglePlayback](./voiceover-frontend/src/VoiceMapScreens.jsx#L375) vẫn dùng SpeechSynthesis nếu `audioUrl` null | UI không báo fallback; không tuân text-only; danh mục frontend không lấy `/public/languages` | Dùng POI có bản dịch nhưng thiếu MP3, ngôn ngữ `ms/hi`, kiểm tra tiếng phát/thông báo |
-| VM-06 (Us-05, UC02) | Phát/dừng, tua ±10 s, tốc độ 0,75–1,5x, bỏ qua | Đáp ứng một phần | [togglePlayback](./voiceover-frontend/src/VoiceMapScreens.jsx#L375), [seek](./voiceover-frontend/src/VoiceMapScreens.jsx#L396), [changeRate](./voiceover-frontend/src/VoiceMapScreens.jsx#L419); [AudioScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L464) không có nút bỏ qua audio, chỉ sang Route | Nút skip; tua SpeechSynthesis ước lượng theo câu, không đúng 10 s | Phát MP3 có sẵn rồi thử toàn bộ điều khiển; thử fallback giọng đọc |
-| VM-07 (UC02) | Tải trước audio trong 300 m, đo ≤1,5 s/≤3 s; cảnh báo GPS yếu | Chưa triển khai | [getNearbyPublishedPois](./src/main/java/com/voiceover/backend/services/PoiService.java#L44) chỉ trả cờ `preloadAudio`; [audio](./voiceover-frontend/src/VoiceMapScreens.jsx#L463) `preload="metadata"` khi đã vào màn hình; [NearbyScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L236) ghi cứng “±3m” | Fetch audio trước, xử lý độ chính xác thật, đo độ trễ | GPS 20/40 m; kiểm network/audio timing với POI 250/350 m |
-| VM-08 (Us-08, UC04, F-02) | Lộ trình gợi ý đã xuất bản từ Session/Route, 2–10 POI, thứ tự, tổng quãng đường và ETA | Chưa triển khai | [RouteScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L475) lấy `pois.slice(0,4)`, 2 km/35 phút tĩnh dòng 490; [VoiceMapController](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L62) chỉ có POST customize, không có GET public routes; [route_stop schema](./src/main/resources/db/migration/V2__session_route.sql#L32) có dữ liệu nền | API đọc route/session đã xuất bản; UI danh sách/chi tiết thực | Tạo draft và published routes, xem khách chỉ thấy published đúng thứ tự/ETA |
-| VM-09 (Us-07, UC03) | Du khách thêm/bớt/sắp xếp route và tính lại | Đáp ứng một phần | [customizePersonalRoute](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L63) gọi [validateAndCalculateCustomRoute](./src/main/java/com/voiceover/backend/services/RouteSessionService.java#L21): kiểm 2–10/published, tính đường chim bay và ETA; [RouteScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L472) không gọi API và không có controls | UI chỉnh sửa, lưu dùng lại lộ trình đã xác nhận, tính lại theo đường đi bộ | Chỉnh 2→3→2 POI, đổi thứ tự; đối chiếu route, quãng đường/ETA |
-| VM-10 (Us-06, UC04) | Chỉ đường đi bộ từng chặng, đến nơi tự sang chặng, lệch đường tính lại, bỏ qua điểm | Đáp ứng một phần | [MapArtwork](./voiceover-frontend/src/VoiceMapScreens.jsx#L165) gọi OSRM profile `driving`; [RouteScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L476) `startJourney` chỉ mở audio POI đầu; ETA tĩnh dòng 510 | Directions đi bộ, tiến trình chặng, theo dõi GPS, xử lý lệch/bỏ qua/lỗi định tuyến | Đi hành trình 2–3 POI bằng GPS giả lập và kiểm chỉ dẫn từng chặng |
-| VM-11 (UC05, FR-5) | Admin xác thực email/mật khẩu băm, trạng thái tài khoản; phiên đăng nhập và chặn mọi API/portal/monitoring | Đáp ứng một phần | [adminLogin](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L75) đối chiếu BCrypt, trả profile không token/session; [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L106) chỉ lưu profile trong localStorage; [getAdminPois](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L92) và mọi `/admin` không kiểm chứng phiên; [AppConfig](./src/main/java/com/voiceover/backend/config/AppConfig.java#L20) CORS `*` | Session/token bảo mật, middleware phân quyền, logout vô hiệu hóa, bảo vệ API | Gọi GET/POST/DELETE admin không cookie/token phải 401/403; login đúng/sai; hết hạn/logout |
-| VM-12 (Us-10, UC06, F-04/05) | Admin thêm/sửa/ẩn/xóa POI, tọa độ/bán kính/ảnh/mô tả, xác nhận xóa | Đáp ứng một phần | [PoiManagement](./voiceover-frontend/src/AdminPortal.jsx#L67) form, save và `confirm` dòng 99; [saveOrUpdatePoi](./src/main/java/com/voiceover/backend/services/PoiService.java#L156) lưu JPA và gọi pipeline; [deletePoiSafely](./src/main/java/com/voiceover/backend/services/PoiService.java#L170) chặn route published; [Poi](./src/main/java/com/voiceover/backend/entities/Poi.java#L8) entity | Không upload file/chọn vị trí trên bản đồ; API không xác thực, thiếu validate server; không chứng minh DB write | Login, CRUD trên DB thử nghiệm, kiểm draft/hidden, khóa ngoại route, dữ liệu sau restart |
-| VM-13 (UC06) | Chỉ POI đã xuất bản hiện cho khách và xóa POI không phá route đã xuất bản | Đáp ứng một phần | [getNearbyPublishedPois](./src/main/java/com/voiceover/backend/services/PoiService.java#L28) tìm published; [existsInPublishedRouteOrSession](./src/main/java/com/voiceover/backend/repositories/RouteStopRepository.java#L11) chặn xóa; nhưng [getPoiAudioGuide](./src/main/java/com/voiceover/backend/services/PoiService.java#L112) lấy POI mọi status/không ẩn; fallback [PoiService](./src/main/java/com/voiceover/backend/services/PoiService.java#L49) tự tạo published | Khóa truy cập guide của draft/hidden, tách nhập POI tự động khỏi truy vấn | Gọi guide bằng ID draft/hidden; thử xóa POI trong route published/draft |
-| VM-14 (Us-11, UC08, F-03) | Lưu mô tả hợp lệ tự kích hoạt pipeline nền, riêng từng ngôn ngữ, 4 trạng thái | Đáp ứng một phần | [saveOrUpdatePoi](./src/main/java/com/voiceover/backend/services/PoiService.java#L156) luôn lưu rồi gọi `@Async` [triggerFullPipelineForPoi](./src/main/java/com/voiceover/backend/services/PipelineService.java#L57); tác vụ tạo `PROCESSING` dòng 76, không tạo `PENDING`; mô tả rỗng chỉ log rồi return dòng 59 | Validate trước khi lưu; lifecycle PENDING; tránh race transaction/async; trạng thái hiển thị Admin (menu disabled) | Tạo POI hợp lệ/rỗng trên DB thử nghiệm; theo dõi task từ PENDING đến kết quả |
-| VM-15 (UC08) | Dịch 15+ ngôn ngữ theo cấu hình, protected_terms, không dịch lại khi source không đổi, retry ≤3 | Đáp ứng một phần | [triggerFullPipelineForPoi](./src/main/java/com/voiceover/backend/services/PipelineService.java#L64) lấy active languages, terms, hash, bỏ qua COMPLETED; [translateRealApiWithProtectedTerms](./src/main/java/com/voiceover/backend/services/PipelineService.java#L299) mask term và gọi Google; `source="vi"` cố định dòng 320; nhánh không key dùng endpoint web không chính thức dòng 339; retry dòng 97 | Kiểm ngôn ngữ nguồn POI; kiểm chống trùng tác vụ, bảo vệ term chắc chắn; chứng minh dịch thực với API | Test stub Translation API theo 16 ngôn ngữ, source khác `vi`, lỗi 1–3 lần, term đặc biệt |
-| VM-16 (UC08, F-03/04) | TTS lưu file, DB giữ path, ngôn ngữ không TTS chỉ text; lỗi retry/log | Đáp ứng một phần | [processLanguageTranslationAndTts](./src/main/java/com/voiceover/backend/services/PipelineService.java#L118) có text-only; [generateRealTtsMp3WithRetry](./src/main/java/com/voiceover/backend/services/PipelineService.java#L182) lưu file và path `/audio/` dòng 228, cắt text 200 ký tự dòng 200; [application.properties](./src/main/resources/application.properties#L20) khai báo static-locations `file:./storage/`, nên `/audio/*` có thể được phục vụ qua static handler; [AppConfig](./src/main/java/com/voiceover/backend/config/AppConfig.java#L29) khai báo thêm `/storage/audio/**` | Chưa thử GET file thật; cắt nội dung; kiểm trạng thái/fallback và file tồn tại | Với TTS stub/local, tạo >200 ký tự, GET URL nhận 200 và nghe đủ; thử lỗi 3 lần |
-| VM-17 (Us-12, UC09) | Admin nghe thử/sửa bản dịch/tạo lại audio đúng 1 ngôn ngữ | Đáp ứng một phần | [updateTranslationAndRegenerateAudio](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L130) gọi async [regenerateSingleLanguageAudio](./src/main/java/com/voiceover/backend/services/PipelineService.java#L158); [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L114) menu disabled; nhánh TTS_ONLY không có key đi thẳng lỗi dòng 206 | API đọc bản dịch/audio/task, UI review/player, TTS_ONLY theo cấu hình; phân quyền | Sửa `en`, kiểm `en` đổi, các ngôn ngữ khác bất biến, nghe file mới |
-| VM-18 (Us-13, UC10) | Admin CRUD Session/Route, publish/draft, 2–10 POI published theo thứ tự | Đáp ứng một phần | [saveRouteWithStops](./src/main/java/com/voiceover/backend/services/RouteSessionService.java#L60) lưu route_stop có thứ tự và validate; [createRoute](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L140) chỉ POST route trong session có sẵn, default status `PUBLISHED`; [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L114) menu disabled; [Session](./src/main/java/com/voiceover/backend/entities/Session.java#L9) có entity | Không API tạo/sửa/session, route list/edit/publish; default publish trước quy trình; chưa kiểm session tồn tại/ràng buộc draft | Tạo session + routes qua UI, publish/đóng, kiểm khách chỉ thấy valid published |
-| VM-19 (Us-16, UC07, FR-7) | AI gợi ý dựa tên/ghi chú ≤15 s, chỉ bản nháp, lỗi cho nhập tay | Đáp ứng một phần | [suggestDescription](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L122) gọi [generateAiDescriptionDraft](./src/main/java/com/voiceover/backend/services/PoiService.java#L178) trả chuỗi template cố định, không AI; [PoiManagement](./voiceover-frontend/src/AdminPortal.jsx#L103) không nút gợi ý | Tích hợp dịch vụ AI, timeout/error, nút/khung nháp, giữ nguyên cho đến Save | Stub AI thành công/lỗi/timeout; xác nhận không DB write trước Save |
-| VM-20 (Us-14, UC11, F-06) | Dashboard trạng thái app/DB/pipeline, lỗi/tỷ lệ lỗi/API latency, ba màu, ≤10 s | Đáp ứng một phần | [Dashboard](./voiceover-frontend/src/AdminPortal.jsx#L52) poll 10 s nhưng chỉ POI/user; [getMonitoringDashboard](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L150) không lấy metric/log/task; [system_metric schema](./src/main/resources/db/migration/V3__monitoring_and_terms.sql#L34) chỉ bảng, không có entity/service thu metric | Nguồn metric và trạng thái thực, cảnh báo màu, gần real-time, bảo vệ API; không chứng minh độ trễ ≤10 s vì poll đúng 10 s cộng mạng | Gây lỗi thử nghiệm, đo timestamp phát sinh→hiển thị, kiểm trạng thái/latency/log |
-| VM-21 (Us-15, UC11, F-06) | Active users, lượt nghe theo POI/ngôn ngữ, auto/tap, route phổ biến | Đáp ứng một phần | [getMonitoringDashboard](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L153) trả `userCount` và `poiUsage`; [UsageEventRepository](./src/main/java/com/voiceover/backend/repositories/UsageEventRepository.java#L9) đếm distinct **toàn thời gian**, không active; [getPoiGuide](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L45) ghi `TAP_POI` khi lấy guide, chưa ghi lúc thực sự phát | Đếm active theo cửa sổ thời gian, event hoàn thành/route, phân ngôn ngữ/auto/tap, tránh đếm lượt không nghe | Phát/chuyển route với ID ẩn danh, so sánh event và số liệu dashboard theo thời gian |
-| VM-22 (F-04, mục 3.4) | CSDL có POI, bản dịch, audio path, session/route, tài khoản, protected term, usage; kho log/metric riêng | Đáp ứng một phần | [V1](./src/main/resources/db/migration/V1__core_schema.sql#L1), [V2](./src/main/resources/db/migration/V2__session_route.sql#L1), [V3](./src/main/resources/db/migration/V3__monitoring_and_terms.sql#L1), [V4](./src/main/resources/db/migration/V4__seed_languages.sql#L1), [V5–V11](./src/main/resources/db/migration/V11__seed_admin_account.sql#L1) tạo schema/seed; [application.properties](./src/main/resources/application.properties#L5) một datasource, `ddl-auto=update` | Chưa chứng minh migrations chạy trên DB; log/metric chưa tách kho; schema đã đổi V1→V11 cần thử trên DB sạch và DB nâng cấp | Flyway migrate trên DB thử nghiệm sạch/nâng cấp, kiểm constraints và JPA `validate` |
-| VM-23 (F-04, UC02) | Dữ liệu sử dụng ẩn danh, không lưu GPS/cá nhân | Đáp ứng một phần | [UsageEvent](./src/main/java/com/voiceover/backend/entities/UsageEvent.java#L11) không trường GPS; [getAnonymousClientId](./voiceover-frontend/src/VoiceMapScreens.jsx#L9) lưu localStorage; [getPoiGuide](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L50) nhận `clientId` tùy ý | Chưa kiểm retention, dữ liệu log và `clientId` có thể gắn thiết bị lâu dài | Xem schema/log/network khi dùng app; xác định chính sách ẩn danh/retention |
-| VM-24 (mục 2.4) | Độ trễ audio 1,5/3 s; AI ≤15 s; GPS mục tiêu ≤5 m/auto ≤30 m | Chưa đủ bằng chứng để kết luận | Không có đo thời gian/telemetry/test; [NearbyScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L236) hiển thị sai số GPS tĩnh, [generateAiDescriptionDraft](./src/main/java/com/voiceover/backend/services/PoiService.java#L178) template không gọi AI | Phép đo với audio thật và thiết bị GPS; thực thi ngưỡng | Đo p95 với mạng/thiết bị được xác định, test GPS có `accuracy` 20/40 m |
-| VM-25 (mục 2.4) | Uptime ≥99,5%; lỗi bên thứ ba không chặn chức năng khác | Chưa đủ bằng chứng để kết luận | [getNearbyPublishedPois](./src/main/java/com/voiceover/backend/services/PoiService.java#L49) gọi OSM/ảnh và có catch chọn lọc; [generateRealTtsMp3WithRetry](./src/main/java/com/voiceover/backend/services/PipelineService.java#L182) retry; không có đo uptime | Chưa có SLO/health/chaos test; GET nearby có thể ghi DB/gọi mạng ngoài | Đo vận hành dài hạn; test ngắt OSM/Wikimedia/Google và vẫn đọc POI lưu sẵn |
-| VM-26 (mục 1.5/2.4) | Mobile React Native; kiến trúc 3 lớp, Docker, CI/CD | Đáp ứng một phần | [main.jsx](./voiceover-frontend/src/main.jsx#L4) là web React/Vite, không React Native; [VoiceMapController](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L14), [PoiService](./src/main/java/com/voiceover/backend/services/PoiService.java#L13), [PoiRepository](./src/main/java/com/voiceover/backend/repositories/PoiRepository.java#L5); [Dockerfile](./Dockerfile#L1), [CI Maven](./.github/workflows/maven.yml#L9). **Build** | Chưa có ứng dụng mobile native; không chứng minh container/CI/CD chạy thực | Build/chạy Docker+MySQL riêng, chạy CI và app trên thiết bị/emulator mobile |
+### 3.4. Có schema/log không có nghĩa có Dashboard giám sát đầy đủ
 
-### Điểm mơ hồ và mâu thuẫn trong PRD
+[UsageEventRepository.java](./src/main/java/com/voiceover/backend/repositories/UsageEventRepository.java) đang đếm client duy nhất của toàn bộ dữ liệu, không phải số người đang hoạt động. Header xanh trên Portal là chuỗi tĩnh; dashboard chưa lấy health/latency/error-rate từ monitoring service.
 
-- Mục 2.2/UC02 yêu cầu tự phát trong **5 giây** sau khi đủ điều kiện, còn mục 2.4/UC02 quy định bắt đầu audio **1,5/3 giây**. Cần xác định mốc đo của từng SLA; không biến cả hai thành một con số tự suy diễn.
-- F-03 mục 3.3 nói bổ sung ngôn ngữ bằng **file cấu hình**; UC08 mục 10 nói theo **danh mục cấu hình**, mục 3.4 mô tả bảng `language`. Cần chốt nguồn sự thật, không coi file và DB cùng bắt buộc.
-- F-04 mục 3.4 mô tả `routes.poi_sequence`; quy tắc UC10 cũng dùng tên này, nhưng thiết kế dữ liệu có thể chuẩn hóa qua bảng thứ tự `route_stop`. Đánh giá tập trung vào hành vi/thứ tự, không ép cột vật lý `poi_sequence`.
-- Mục 3.4 đòi **Log & Metrics Store tách khỏi** `voicemap_db`, trong khi các phần khác chỉ nói “kho giám sát”; đây là yêu cầu kiến trúc cần xác nhận mức tách vật lý. Hiện tại chỉ có một datasource.
-- Us-10 nói lưu POI rồi “hiển thị ngay” cho khách, nhưng UC06/F-05 quy định POI nháp không hiển thị; hiểu là chỉ POI đã xuất bản mới hiện, vẫn cần xác nhận quy trình publish.
-- Us-04 yêu cầu audio mặc định nếu thiếu; UC02 E3 nói ngôn ngữ chỉ hỗ trợ text thì hiển thị text, không phát. Cần chốt thứ tự ưu tiên khi ngôn ngữ được chọn là text-only.
-- UC05 “quên mật khẩu” ghi “nếu chức năng này được hỗ trợ”, nên không xếp gửi email reset vào backlog bắt buộc. F-06 tự động gửi cảnh báo lỗi thuộc **v1.1**; CPU/Memory chỉ “dự kiến”, không đánh dấu thiếu cho bản 1.0.
-- Mục 2.4 GPS “mục tiêu ≤5 m ngoài trời” phụ thuộc thiết bị/môi trường; kiểm tra app sử dụng accuracy và giới hạn tự phát ≤30 m, không thể cam kết độ chính xác phần cứng bằng mã.
+### 3.5. Code trên GitHub không tự mang theo DB hiện tại
 
-## 4. Tổng hợp tiến độ và giới hạn
+Chưa có file SQL xuất dữ liệu nghiệp vụ/seed đầy đủ cho nhóm. Migration V12 chỉ đổi cấu trúc kiểm tra stop_order; nó không chứa 6 POI hoặc Session/Route trên máy đang chạy. Dữ liệu route cá nhân và cooldown ở localStorage cũng không đi theo Git. T09 xử lý phần bàn giao môi trường này.
 
-Đã có nền tảng Java/Spring, schema 11 migration, JPA repositories, giao diện web khách/Admin, CRUD POI ở mức mã, pipeline dịch/TTS có code gọi dịch vụ, API route tùy chỉnh và dashboard đếm cơ bản. Giao diện route chủ yếu dùng bốn POI gần nhất và thời gian/quãng đường cố định. Backend lưu dữ liệu ở nhiều service nhưng **chưa chạy được với MySQL hiện tại**, nên những luồng đó chưa thể được tuyên bố hoạt động E2E. Luồng UI khách **mở app → GPS → gửi nearby** đã được chạy tới request và trả 502 vì backend không khởi động; không có luồng **mở app → nghe audio**, **admin login → CRUD**, **admin save → dịch/TTS → khách nghe**, hoặc **session → route → dẫn đường** được xác minh đầy đủ.
+## 4. Danh sách việc để chia cho thành viên
 
-Các lỗi chặn chính: (1) MySQL từ chối thông tin kết nối có sẵn, không được dùng `createDatabaseIfNotExist`/`ddl-auto=update` trên DB hiện hữu; (2) API admin không có authz phía server; (3) truy vấn POI không áp bán kính và tự ghi POI demo; (4) file audio thực chưa được thử qua HTTP và TTS hiện cắt văn bản ở 200 ký tự; (5) frontend không tự phát theo GPS và route chưa tích hợp dữ liệu; (6) pipeline không chắc chắn tạo file/thuyết minh đầy đủ; (7) không có test tự động hiện tại. Các phần ngoài PRD: tự nhập POI từ OSM/Photon và tự bổ sung dữ liệu demo trong GET; tìm ảnh Wikimedia tự động; API tạo ảnh POI bằng OpenAI/placeholder; nhánh Piper TTS. Những phần này không được tính là đáp ứng yêu cầu “AI gợi ý mô tả” hay “Directions đi bộ”.
+Thứ tự dưới đây ưu tiên use case và các phụ thuộc hiện có. Có thể làm T04, T05, T06 song song với nhóm pipeline. Các gợi ý người nhận là cách chia việc cho nhóm, không phải yêu cầu triển khai ngay trong lượt viết báo cáo này.
 
-Giới hạn: source có các tệp build `target/` thay đổi sẵn từ trước; việc xác minh đã dùng bản sao trong temp để không ghi đè. Build bằng Java 24, chưa đối chiếu JDK 21 của CI. Không có kết nối DB hợp lệ và key dịch/TTS/AI; không kiểm runtime migration, bảo vệ API, file serving, GPS thật, OSRM, độ trễ, uptime hay triển khai container. Frontend có 17 lint warnings nhưng exit code 0. README mô tả skeleton/V1–V4 là cũ so với source hiện tại, nên không dùng làm bằng chứng tiến độ.
+### T01 — Nghiệm thu provider thật và nhánh phục vụ audio (UC02/UC08)
 
-## 5. Backlog ưu tiên, chia cho AI agent
+**Người nhận phù hợp:** backend/pipeline.
 
-Mỗi việc là đầu việc độc lập sau các phụ thuộc ghi rõ. Tiêu chí nghiệm thu yêu cầu kiểm chứng trên DB **thử nghiệm riêng/snapshot đã được đồng ý**, không reset hay ghi đè DB hiện hữu.
+**Cần làm:**
 
-| Thứ tự | Mục tiêu / phụ thuộc | Code liên quan, việc cần làm | Tiêu chí nghiệm thu | Cỡ |
-|---|---|---|---|---|
-| P0-1 | Khởi động backend an toàn; chặn tất cả E2E | [application.properties](./src/main/resources/application.properties#L5), [README.md](./README.md): thống nhất biến kết nối; bỏ tự tạo DB/`ddl-auto=update` khỏi cấu hình vận hành; cấu hình tách môi trường kiểm thử và Flyway có kiểm soát. Chờ credential đúng, chỉ khảo sát schema read-only trước | Backend start với DB được chỉ định, không có schema/data diff ngoài kế hoạch; GET read-only thành công; migration trên DB thử riêng | Vừa |
-| P0-2 | Bảo vệ quản trị; phụ thuộc P0-1 để kiểm E2E | [VoiceMapController](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L75), [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L106), [pom.xml](./pom.xml#L13): thêm phiên/token, security filter cho `/api/admin/**`, phân quyền Admin/Staff theo quyết định sản phẩm, logout/hết hạn; bỏ tin vào localStorage profile | Anonymous/bogus token không đọc/ghi Admin; login đúng/sai/disabled; logout và hết hạn bị từ chối; test integration | Lớn |
-| P0-3 | POI public đúng vị trí; phụ thuộc P0-1 | [PoiService](./src/main/java/com/voiceover/backend/services/PoiService.java#L27), [VoiceMapScreens](./voiceover-frontend/src/VoiceMapScreens.jsx#L525), [OpenStreetMapPoiService](./src/main/java/com/voiceover/backend/services/OpenStreetMapPoiService.java#L329): lọc Haversine 500 m, theo dõi GPS, tách nhập OSM/demo khỏi GET; không để guide trả draft/hidden | POI 499 m hiện, 501 m không; GET không ghi DB; vị trí đổi cập nhật list; draft/hidden bị chặn | Vừa |
-| P0-4 | Audio thật có thể phát; phụ thuộc P0-1/P0-3 | [PipelineService](./src/main/java/com/voiceover/backend/services/PipelineService.java#L182), [application.properties](./src/main/resources/application.properties#L20), [PoiService](./src/main/java/com/voiceover/backend/services/PoiService.java#L111), [AudioScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L282): kiểm URL/path tĩnh qua HTTP, phục vụ MP3/WAV, bỏ cắt thuyết minh 200 ký tự, fallback ngôn ngữ mặc định/text-only đúng quy tắc, nút skip | Tạo file từ text dài, GET audio 200 đúng content type, nghe đủ, thiếu ngôn ngữ có thông báo, text-only không phát giọng sai | Lớn |
-| P1-1 | Pipeline tin cậy; phụ thuộc P0-1/P0-4 | [PipelineService](./src/main/java/com/voiceover/backend/services/PipelineService.java#L57), [PoiService](./src/main/java/com/voiceover/backend/services/PoiService.java#L156): validate trước Save, PENDING/PROCESSING/COMPLETED/FAILED, xử lý sau commit, không tạo trùng, source language và protected terms, retry có kiểm chứng | Mỗi active language có 1 task đúng lifecycle; save unchanged không xử lý; sửa 1 translation chỉ TTS_ONLY; lỗi thử ≤3, log đầy đủ; test mock API | Lớn |
-| P1-2 | Khách tự phát đúng GPS; phụ thuộc P0-3/P0-4 | [VoiceMapScreens](./voiceover-frontend/src/VoiceMapScreens.jsx#L525): watchPosition + accuracy, dwell 3 s, hysteresis 20 m, cooldown 30 phút, ưu tiên/hàng đợi, chặn autoplay, preload 300 m, event chỉ khi phát | Test GPS/timer có ít nhất các biên 29/31 m, 2/3 s, rời bán kính+19/+21 m, 29/31 phút, hai POI | Lớn |
-| P1-3 | Session/Route admin tới khách; phụ thuộc P0-2/P0-3 | [RouteSessionService](./src/main/java/com/voiceover/backend/services/RouteSessionService.java#L60), [VoiceMapController](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L139), [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L114), [RouteScreen](./voiceover-frontend/src/VoiceMapScreens.jsx#L472): CRUD/publish session & route, public GET filtered, UI sắp xếp POI/preview | Tạo session/route 2–10 điểm, đổi thứ tự, chỉ published hiển thị khách đúng thứ tự; không thể publish route có POI nháp | Lớn |
-| P1-4 | Dẫn đường và route tùy chỉnh; phụ thuộc P1-3 | [MapArtwork](./voiceover-frontend/src/VoiceMapScreens.jsx#L89), [RouteSessionService](./src/main/java/com/voiceover/backend/services/RouteSessionService.java#L21): Directions profile đi bộ, quãng đường/ETA theo đường, thêm/bớt/reorder, chặng tiếp/skip/lệch đường | 2–10 POI, route recalculation sau mỗi sửa; đi đủ chặng và kết thúc; mất Directions vẫn thấy POI kế tiếp | Lớn |
-| P2-1 | Admin review bản dịch/audio; phụ thuộc P0-2/P1-1 | [AdminPortal](./voiceover-frontend/src/AdminPortal.jsx#L114), [VoiceMapController](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L129): list/preview/edit/regenerate từng ngôn ngữ, trạng thái task và lỗi | Sửa một ngôn ngữ không ảnh hưởng ngôn ngữ khác, nghe file mới, trạng thái phản ánh kết quả thật | Vừa |
-| P2-2 | Monitoring thực; phụ thuộc P0-2/P1-1/P1-2/P1-3 | [getMonitoringDashboard](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java#L150), [Dashboard](./voiceover-frontend/src/AdminPortal.jsx#L52), [V3 schema](./src/main/resources/db/migration/V3__monitoring_and_terms.sql#L1): ghi metric/log và usage thật, active window, nhóm theo ngôn ngữ/auto-tap/route, ba trạng thái, phản hồi lỗi | Dashboard chỉ Admin; số liệu đối chiếu event/metric, dữ liệu mới hiển thị ≤10 s theo mốc đo thống nhất | Lớn |
-| P2-3 | AI gợi ý mô tả đúng PRD; phụ thuộc P0-2 | [generateAiDescriptionDraft](./src/main/java/com/voiceover/backend/services/PoiService.java#L178), [PoiManagement](./voiceover-frontend/src/AdminPortal.jsx#L67): thay template bằng AI service, timeout 15 s, nút nháp không tự lưu, fallback nhập tay | AI/stub trả nháp trong 15 s; lỗi không cản lưu tay; DB/pipeline không đổi trước Save | Vừa |
-| P2-4 | Ảnh, dữ liệu và release hardening; phụ thuộc P0-1/P0-2 | [PoiManagement](./voiceover-frontend/src/AdminPortal.jsx#L103), [RealContentService](./src/main/java/com/voiceover/backend/services/RealContentService.java#L34), [Dockerfile](./Dockerfile#L13), [CI](./.github/workflows/maven.yml#L37): upload ảnh/chọn map; kiểm file storage; test migration và JDK 21; smoke Docker/CI; đo SLA/uplink | Upload và xem thumbnail, migration sạch/nâng cấp pass, CI chạy test có thật, bằng chứng SLA/uptime hoặc ghi chưa chứng minh | Lớn |
+- Cấu hình provider Google/Piper thật và kiểm thuyết minh dài hơn 200 ký tự qua URL HTTP: nghe đủ đầu/giữa/cuối, MIME/Range, và sau restart.
+- Kiểm file thiếu/hỏng, text-only và fallback trên trình duyệt thật; trạng thái phân biệt đúng giọng trình duyệt với file TTS.
+- Có URL phiên bản mới khi tạo lại; xem chính sách dọn file WAV cũ không còn được tham chiếu.
 
-Không đưa email reset mật khẩu “nếu hỗ trợ”, CPU/Memory “dự kiến” hoặc cảnh báo tự động v1.1 vào danh sách bắt buộc cho phiên bản PRD 1.0.
+**Nghiệm thu còn lại:** provider thật sinh file dài đầy đủ và URL trả đúng file sau restart; lỗi TTS/file mất/text-only/fallback đúng; khách nhận bản Admin sửa. Generator WAV/URL mới và ưu tiên DB đã có test unit/môi trường cô lập.
+
+**File bắt đầu:** [PipelineService.java](./src/main/java/com/voiceover/backend/services/PipelineService.java), [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [AppConfig.java](./src/main/java/com/voiceover/backend/config/AppConfig.java), [narrationApi.js](./voiceover-frontend/src/narrationApi.js), [narrationPlayer.js](./voiceover-frontend/src/narrationPlayer.js).
+
+### T02 — Hoàn thiện tính đúng và khả năng phục hồi pipeline (ưu tiên cao, UC08)
+
+**Người nhận phù hợp:** backend; phối hợp người làm T01.
+
+**Cần làm:**
+
+- Dùng sourceLanguageCode thật; không mặc định mọi văn bản đều tiếng Việt khi gọi dịch.
+- Đối chiếu vòng đời task pipeline toàn phần với job UC09 (đã có PENDING → PROCESSING → COMPLETED/FAILED, phát sau commit, chống trùng, phục hồi task dở khi restart).
+- Không bỏ qua TTS toàn phần lỗi chỉ vì bản dịch có cùng hash; phân biệt cần dịch lại và chỉ cần tạo lại audio.
+- Retry tối đa 3 lần theo PRD, lỗi ngôn ngữ này không ngừng các ngôn ngữ khác; đặt timeout thực cho request.
+- Giữ protected terms và bản sửa tay đúng quy tắc; thêm/ngừng ngôn ngữ không đòi sửa mã UI.
+- API UC09 đã đọc task/lỗi và sửa một ngôn ngữ độc lập. Kiểm tích hợp lỗi/tác vụ đồng thời với pipeline toàn phần; UC11 vẫn thiếu monitoring.
+
+**Nghiệm thu còn lại:** source language đúng, tác vụ pipeline toàn phần không mắc kẹt/lưu trùng, TTS lỗi có thể retry không cần dịch lại, và thử provider thật.
+
+**File bắt đầu:** [PipelineService.java](./src/main/java/com/voiceover/backend/services/PipelineService.java), [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [AppConfig.java](./src/main/java/com/voiceover/backend/config/AppConfig.java), [PipelineTask.java](./src/main/java/com/voiceover/backend/entities/PipelineTask.java).
+
+### T03 — Màn Translations & Audio (UC09; đã triển khai, nghiệm thu môi trường còn lại)
+
+**Trạng thái:** menu, giao diện, API, lưu một ngôn ngữ, nghe thử, task/retry và xử lý lỗi đã có. Không cần thành viên khác làm lại màn hình.
+
+**Cần làm:**
+
+- Đã restart backend UC09 và xác nhận `/admin/translations` tải được; GET danh sách và chi tiết trả HTTP 200 cho 6 POI. Nếu bàn giao sang máy khác, restart backend sau khi lấy mã mới.
+- Nếu cần nghiệm thu file giọng thật, cấu hình Google/Piper, chờ task `COMPLETED`, mở URL WAV và kiểm khách nhận nội dung đã lưu.
+- Đã có: lựa chọn POI qua danh sách admin hiện hữu; GET index/detail; PUT/POST riêng; trạng thái task; phát lỗi lưu/provider; dirty draft không mất; retry task lỗi.
+
+**Kiểm tra còn lại:** chưa thử ghi bản sửa mới lên DB để không đổi dữ liệu demo; cần cấu hình/thử Google hoặc Piper thật để xác nhận file audio được tạo.
+
+**File bắt đầu:** [AdminPortal.jsx](./voiceover-frontend/src/AdminPortal.jsx), [VoiceMapController.java](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java), [PipelineService.java](./src/main/java/com/voiceover/backend/services/PipelineService.java), [TranslationRepository.java](./src/main/java/com/voiceover/backend/repositories/TranslationRepository.java), [AudioRepository.java](./src/main/java/com/voiceover/backend/repositories/AudioRepository.java).
+
+### T04 — Làm AI gợi ý mô tả thật (UC07, có thể làm độc lập)
+
+**Người nhận phù hợp:** một thành viên làm trọn UI + API AI.
+
+**Cần làm:** thêm nút Gợi ý bằng AI trên form POI; lấy tên/ghi chú, gọi dịch vụ AI sinh văn bản; hiển thị bản nháp để sửa/chấp nhận/bỏ; timeout 15 giây và thông báo lỗi/nhập tay.
+
+**Nghiệm thu:** nhấn gợi ý không đổi DB và không tạo task; hủy không lưu; chỉ Lưu POI mới ghi mô tả/kích hoạt UC08; lỗi/quá 15 giây vẫn nhập tay được. Không tính template String.format hoặc API sinh ảnh là đã hoàn thành UC07.
+
+**File bắt đầu:** [AdminPortal.jsx](./voiceover-frontend/src/AdminPortal.jsx), [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [VoiceMapController.java](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java).
+
+### T05 — Hoàn tất dẫn đường tự động (ưu tiên cao, UC04)
+
+**Người nhận phù hợp:** frontend GPS/bản đồ.
+
+**Cần làm:**
+
+- Khi đến POI, cập nhật tiến độ/tự chuyển chặng đúng quy tắc; POI cuối tự kết thúc. Không chỉ đổi nhãn nút.
+- Dùng GPS mới và đáng tin trước khi tự xác nhận đến nơi; tránh chuyển nhiều chặng do GPS rung hoặc POI trùng tọa độ.
+- Phối hợp với bộ phát UC02 để không chồng tiếng/phát lặp; giữ tiến độ Route và cooldown audio là hai trạng thái riêng.
+- Định nghĩa và phát hiện lệch tuyến theo geometry; tính lại từ vị trí hiện tại, tránh gọi Directions liên tục.
+- Giữ nhánh bỏ qua/dừng, mất GPS, Directions lỗi và marker đích; không vẽ đường thẳng rồi gọi là đường đi bộ thực.
+
+**Nghiệm thu:** mô phỏng và thử thực tuyến ít nhất 3 POI, đến từng điểm chỉ chuyển một lần, đến cuối tự kết thúc; sai số lớn/GPS cũ không tự xác nhận; đi lệch tính lại, API lỗi vẫn biết đích tiếp theo.
+
+**File bắt đầu:** [RouteJourney.jsx](./voiceover-frontend/src/RouteJourney.jsx), [useTourLocation.js](./voiceover-frontend/src/useTourLocation.js), [useTourNarration.js](./voiceover-frontend/src/useTourNarration.js), [OrderedRouteMap.jsx](./voiceover-frontend/src/OrderedRouteMap.jsx), [RouteSessionService.java](./src/main/java/com/voiceover/backend/services/RouteSessionService.java).
+
+### T06 — Hoàn thiện nhập liệu POI (UC06)
+
+**Người nhận phù hợp:** frontend form/bản đồ + backend upload/validation.
+
+**Cần làm:** chọn tọa độ trên bản đồ và đồng bộ ô nhập; upload thumbnail thật rồi lưu URL; chọn ngôn ngữ gốc từ catalog; validate tên/mô tả/tọa độ/bán kính/trạng thái/ngôn ngữ ở backend, không chỉ HTML; kiểm các lỗi lưu và form sửa dữ liệu.
+
+**Nghiệm thu:** tạo → tải lại → sửa → tải lại → ẩn/xuất bản → xóa với POI kiểm thử; file ảnh còn sau restart; input API sai bị từ chối; các guard Route hiện có vẫn trả lỗi rõ và không làm mất dữ liệu. Kiểm trên dữ liệu riêng, không phá Route #1 đang dùng để demo.
+
+**File bắt đầu:** [AdminPortal.jsx](./voiceover-frontend/src/AdminPortal.jsx), [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [VoiceMapController.java](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java).
+
+### T07 — Làm monitoring và thống kê đủ PRD (UC11)
+
+**Người nhận phù hợp:** backend thống kê + frontend Dashboard. **Phụ thuộc một phần:** task/lỗi thật từ T02.
+
+**Cần làm:**
+
+- Health App/DB/Pipeline, ba trạng thái xanh/vàng/đỏ theo dữ liệu thật; số task chờ/xử lý/lỗi, error rate, response time, lỗi gần nhất.
+- Active users theo định nghĩa thời gian rõ; lượt nghe theo POI/ngôn ngữ, tỷ lệ AUTO_PLAY/TAP_POI, Route phổ biến.
+- Bổ sung sự kiện mở app/chọn hoặc bắt đầu Route và dữ liệu cần tính active; tránh ghi trùng khi render/preload/refresh.
+- Đồng bộ nhãn người dùng/lượt nghe: số client từng ghi nhận không phải active users, lượt nghe không phải số người nghe duy nhất.
+- Xử lý API monitoring lỗi và dữ liệu rỗng; đo độ trễ cập nhật thay vì chỉ đặt interval 10 giây.
+
+**Nghiệm thu:** một kịch bản sự kiện có số lượng biết trước đối chiếu đúng từng chỉ số; giả lập lỗi DB/pipeline làm trạng thái thay đổi đúng; số liệu mới xuất hiện trong thời gian PRD; refresh không tự tăng usage.
+
+**File bắt đầu:** [AdminPortal.jsx](./voiceover-frontend/src/AdminPortal.jsx), [VoiceMapController.java](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java), [PlaybackEventController.java](./src/main/java/com/voiceover/backend/controllers/PlaybackEventController.java), [UsageEventRepository.java](./src/main/java/com/voiceover/backend/repositories/UsageEventRepository.java), [SystemLog.java](./src/main/java/com/voiceover/backend/entities/SystemLog.java).
+
+### T08 — Đồng bộ API public, ngôn ngữ và các nhánh GPS (UC01/UC02)
+
+**Người nhận phù hợp:** frontend/backend tích hợp.
+
+**Cần làm:** sửa API nearby cũ lọc bán kính, bỏ ghi/seed/refresh nội dung khỏi luồng đọc; lấy ngôn ngữ khách từ API active thay danh sách cố định; cảnh báo GPS yếu/từ chối quyền gọn trong giao diện; kiểm fallback theo tình trạng audio và nội dung thực.
+
+**Nghiệm thu:** API 499/501 m và POI nháp/ẩn đúng; GET không tự tạo/sửa POI hoặc gọi pipeline ngoài kế hoạch; không có GPS vẫn xem marker và nghe thủ công; sai số >30 m không tự phát và có trạng thái phù hợp; ngôn ngữ inactive không còn được chọn. Giữ nguyên bản đồ rộng, không đưa lại thanh bật/tắt/hộp chào đã bỏ.
+
+**File bắt đầu:** [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [VoiceMapScreens.jsx](./voiceover-frontend/src/VoiceMapScreens.jsx), [useTourLocation.js](./voiceover-frontend/src/useTourLocation.js), [narrationApi.js](./voiceover-frontend/src/narrationApi.js).
+
+### T09 — Bộ dữ liệu và hướng dẫn cho máy khác (việc bàn giao nhóm)
+
+**Người nhận phù hợp:** người đang có MySQL chứa dữ liệu demo.
+
+**Cần làm:** xuất dữ liệu nghiệp vụ SQL hoặc seed có thể tái lập; ghi thứ tự chạy migration/import, cấu hình MySQL và lệnh chạy backend/frontend; nếu có file ảnh/audio local thì bàn giao chúng cùng đường dẫn. Không nhầm migration schema với bản xuất dữ liệu. Kiểm lại dữ liệu mẫu/tọa độ trước khi dùng để nghiệm thu GPS thực.
+
+**Nghiệm thu:** một thành viên clone nhánh đúng vào máy/DB mới, làm theo tài liệu và nhìn thấy POI, Session/Route, thứ tự, bản dịch cần demo; restart vẫn còn; không cần database trên máy tác giả. File SQL này hiện **chưa được xuất**, không ghi là đã có.
+
+**File bắt đầu:** [README.md](./README.md), [db/migration/](./src/main/resources/db/migration/), [SESSION_ROUTES_REQUIREMENTS.md](./SESSION_ROUTES_REQUIREMENTS.md).
+
+### T10 — Kiểm chứng cuối và cấu hình phát hành (sau các luồng chức năng)
+
+**Cần làm:**
+
+- Kiểm migration DB sạch và DB nâng cấp đến V12, cấu hình môi trường dev/test/release; hiện source đang bật Flyway và dùng ddl-auto=update, không phải cấu hình validate như báo cáo cũ.
+- Chạy CI JDK 21, bổ sung kiểm frontend trong quy trình CI nếu nhóm yêu cầu; smoke test Docker/backend/frontend và storage trên môi trường triển khai.
+- Thử GPS và giọng đọc trên thiết bị thật, browser policy, mất kết nối; đo audio đã preload <1,5 giây, trường hợp còn lại tối đa 3 giây; đo AI ≤15 giây.
+- Kiểm lỗi dịch vụ bên thứ ba không làm ngừng chức năng còn lại. Uptime ≥99,5% cần bằng chứng vận hành theo thời gian, không dùng unit test để khẳng định.
+- Đối chiếu sản phẩm web responsive hiện tại với yêu cầu Mobile App của đề tài; repo hiện chưa có dự án mobile riêng.
+
+**Nghiệm thu:** có biên bản/kết quả và môi trường tái lập; mục chưa có điều kiện đo phải ghi chưa kiểm chứng, không đánh dấu hoàn tất theo cảm tính.
+
+**File bắt đầu:** [pom.xml](./pom.xml), [maven.yml](./.github/workflows/maven.yml), [Dockerfile](./Dockerfile), [application.properties](./src/main/resources/application.properties), [voiceover-frontend/](./voiceover-frontend/).
+
+### Gợi ý chia nhóm
+
+| Nhánh việc | Phần nhận | Phụ thuộc chính |
+|---|---|---|
+| Backend nội dung | T01 + T02 | Cấu hình dịch vụ dịch/TTS thật; dữ liệu kiểm thử riêng |
+| Admin nội dung | UC09 đã có; T04 | Provider thật để nghiệm thu audio; T04 có thể làm độc lập |
+| GPS/bản đồ/POI | T05 + T06 + T08 | Dùng lại UC02/UC03/UC10 đã có; thống nhất thay đổi chung ở PoiService/AdminPortal |
+| Tích hợp và nghiệm thu | T07 + T09 + T10 | Phối hợp các nhóm trên; không coi file build hoặc schema migration là dữ liệu demo |
+
+## 5. Phân biệt PRD gốc và điều chỉnh đã duyệt
+
+### Yêu cầu gốc dùng để đối chiếu
+
+- F-01/UC01–UC02: GPS liên tục, POI gần 500 m, bán kính mặc định 50 m, accuracy ≤30 m, dwell ≥3 giây, rời vùng +20 m, cooldown 30 phút, ưu tiên/hàng đợi, preload 300 m và điều khiển nghe.
+- F-02/UC03–UC04: Route 2–10 POI xuất bản, có thứ tự, Directions đi bộ, tùy chỉnh tính lại đường, dẫn đường/chặng và tự chuyển khi đến.
+- F-03/UC08–UC09: dịch/TTS nhiều ngôn ngữ, protected terms, xử lý nền, trạng thái/retry, sửa riêng một ngôn ngữ, text-only cho ngôn ngữ không hỗ trợ.
+- F-05/UC05–UC07/UC10: đăng nhập, quản lý POI/ảnh, AI chỉ tạo nháp, Session/Route.
+- F-06/UC11 và mục 2.4: monitoring/usage, độ trễ cập nhật, audio/AI, GPS và độ khả dụng.
+
+### Quy tắc đã bổ sung hoặc làm rõ trong phiên này
+
+1. Session/Route nháp được lưu dở; Route nháp có thể 0/1/>10 điểm. Chỉ khi xuất bản mới bắt buộc 2–10 POI hợp lệ, đã xuất bản và không trùng.
+2. Session chỉ xuất bản khi có ít nhất một Route hợp lệ đã xuất bản; không tự xuất bản Route nháp.
+3. Khách chỉ thấy Route khi cả Route và Session xuất bản; start/leg cũng kiểm lại khả dụng.
+4. Chặn xóa/ẩn/chuyển POI về nháp hoặc làm tọa độ không hợp lệ nếu phá Route đang phục vụ; nêu rõ Route ảnh hưởng. POI còn được Route nháp tham chiếu hiện cũng phải bỏ khỏi Route trước khi xóa.
+5. Tạm đóng Session bằng về Nháp, giữ dữ liệu. Route xuất bản hợp lệ cuối cùng trong Session đang mở phải được xử lý cùng quy tắc giữ Session hợp lệ.
+6. Preview marker đánh số đồng bộ danh sách, hiển thị số điểm/đường đi bộ/thời gian/coverage audio/ngôn ngữ; dùng nút lên/xuống.
+7. Bỏ thanh bật/tắt tự phát và hộp chào, vào thẳng bản đồ; chỉ hiện thao tác bắt đầu nghe khi browser chặn.
+8. Bản đồ khám phá xem mọi POI xuất bản hợp lệ; danh sách gần bạn vẫn 500 m. Điểm trùng tọa độ có cụm chọn từng điểm, không tự sửa DB.
+9. GPS quá 5 giây coi là cũ; khi tab ẩn không bắt đầu lượt tự động mới; cooldown lưu theo thiết bị/trình duyệt. Đây là lựa chọn kỹ thuật hiện tại, không thay ngưỡng PRD.
+10. Telemetry lỗi không dừng nghe; chống gửi lặp hiện chỉ trong một tiến trình, TTL 30 phút/tối đa 2.048 khóa, chưa có bảo đảm đa instance hoặc hàng đợi gửi bền vững.
+
+Chi tiết: [Session/Routes](./SESSION_ROUTES_REQUIREMENTS.md), [UC03](./UC03_IMPLEMENTATION.md), [UC02 GPS](./UC02_GPS_IMPLEMENTATION.md).
+
+## 6. Bằng chứng hiện có và dữ liệu để nghiệm thu
+
+### Kiểm thử/build đã thực hiện trong phiên
+
+- **Backend:** các kết quả theo phạm vi được ghi ở từng tài liệu; UC09 có test service/worker/controller/generator, chưa thay thế kiểm tra tích hợp MySQL/provider thật.
+- **Frontend:** 24 trường hợp có kết quả qua: GPS 9, bộ phát 10, Route 5. Build production thành công, gồm lượt trước khi push nhánh; lint không có lỗi, còn 5 cảnh báo ở demo không được mount.
+- **API/MySQL thật:** đọc được 6 POI, 16 ngôn ngữ active; có Session/Route đã lưu. Backend đã restart và có API playback mới.
+- **Usage:** đã kiểm preload không tăng lượt; một AUTO_PLAY tăng đúng một lượt, gửi lại không tăng, AUDIO_COMPLETED không tăng số lượt bắt đầu. Các bản ghi QA được mô tả trong tài liệu UC02, không diễn giải thành số người dùng thật.
+- **Session/Routes:** V12 trên DB thật; lưu nháp 11 điểm được, xuất bản bị chặn, phục hồi về nháp rỗng; chặn POI gây hỏng Route; tạm đóng/mở lại Session, public lọc đúng.
+- **Sau restart:** 5/5 kiểm tra Session #1/Route #1/thứ tự [2,1]/public/start trả LineString đi bộ qua.
+- **UI:** kiểm GPS/bộ phát bằng mô phỏng; bản đồ có 5 marker đại diện 6 POI, popup chọn riêng hai điểm trùng tọa độ, khung nhìn 390/1.280 px. Nghe thủ công đã được người dùng xác nhận riêng.
+- UC09: 7 test worker/WAV và 24 test frontend hồi quy đã qua; frontend production build thành công. UI fixture không phải API/MySQL thật. Xem [UC09_IMPLEMENTATION.md](./UC09_IMPLEMENTATION.md).
+
+### Snapshot dữ liệu đọc lại ngày 23/10/2026
+
+| Dữ liệu | Trạng thái đọc từ backend |
+|---|---|
+| POI | 6 điểm đều PUBLISHED, ID 1–6 |
+| Ngôn ngữ | 16 active, 14 có cờ ttsSupported |
+| Session #1 | PUBLISHED |
+| Route #1 | PUBLISHED, POI theo thứ tự **[2,1]**, hiện trong API public |
+| Route #2 | DRAFT, 0 điểm, không hiện trong API public |
+| MySQL hiện tại | voicemap_db trên máy phát triển; dữ liệu không tự đi theo Git |
+
+Không sửa các bản ghi demo này chỉ để chạy thử nhánh phá dữ liệu; dùng POI/Route/DB kiểm thử riêng. Hai POI có cùng tọa độ đã được thể hiện thành cụm trên map, vẫn cần rà lại chất lượng tọa độ trước khi nghiệm thu đi bộ thật.
+
+### Chưa có đủ bằng chứng
+
+- Pipeline hoàn chỉnh từ POI bất kỳ → nhiều ngôn ngữ → file audio đủ nội dung → khách nghe trên thiết bị thật.
+- UC09 ghi/đọc lại bản sửa bằng MySQL sau restart backend mới và thử file TTS từ provider thật.
+- UC07 AI sinh văn bản thực trong 15 giây.
+- UC04 tự đi qua các chặng đến khi tự kết thúc.
+- Dashboard monitoring/active users/SLA đầy đủ.
+- Fresh clone/DB mới có dữ liệu giống máy hiện tại, SQL export, triển khai Docker và kết quả CI cho toàn bộ thay đổi mới.
+- Mục tiêu GPS ngoài trời ≤5 m, độ trễ audio, uptime ≥99,5%.
+
+## 7. Phần hoãn hoặc không được tự tính là bắt buộc hoàn tất ngay
+
+- **Quyền và bảo vệ phiên/API:** đang hoãn theo yêu cầu tập trung use case. Tuy vậy phải ghi đúng hiện trạng UC05: profile localStorage không phải phiên xác thực server, và API Admin chưa được bảo vệ đầy đủ. Không mô tả hệ thống đã sẵn sàng quản trị an toàn chỉ vì có form login.
+- **Kéo thả và offline đầy đủ:** đã để sau trong phạm vi Session/Routes. Hiện không có service worker/gói offline đầy đủ; localStorage Route và preload tạm không tương đương offline hoàn chỉnh. Không bắt làm kéo thả để nghiệm thu bản dùng nút lên/xuống đã duyệt.
+- **Cảnh báo tự động khi lỗi vượt ngưỡng:** PRD ghi dự kiến v1.1; không đưa vào bắt buộc v1.0.
+- **Gửi email đặt lại mật khẩu:** chưa có; không tự coi là đầu việc bắt buộc khi chưa chốt phần “nếu hỗ trợ”.
+- Các phần import OSM, tự tìm/tạo ảnh và Piper là nhánh bổ sung có trong code, không thay thế nghiệm thu AI gợi ý mô tả/ảnh upload/TTS theo use case chính.
+
+## 8. Điểm vào mã nguồn để người nhận bắt đầu
+
+| Khu vực | File chính |
+|---|---|
+| App đang được chạy thật | [main.jsx](./voiceover-frontend/src/main.jsx) → [VoiceMapScreens.jsx](./voiceover-frontend/src/VoiceMapScreens.jsx) hoặc [AdminPortal.jsx](./voiceover-frontend/src/AdminPortal.jsx) |
+| GPS/tự phát/nghe | [autoNarration.js](./voiceover-frontend/src/autoNarration.js), [useTourLocation.js](./voiceover-frontend/src/useTourLocation.js), [useTourNarration.js](./voiceover-frontend/src/useTourNarration.js), [narrationPlayer.js](./voiceover-frontend/src/narrationPlayer.js), [NarrationAudioScreen.jsx](./voiceover-frontend/src/NarrationAudioScreen.jsx) |
+| Route khách | [RoutePlanner.jsx](./voiceover-frontend/src/RoutePlanner.jsx), [routePlan.js](./voiceover-frontend/src/routePlan.js), [RouteJourney.jsx](./voiceover-frontend/src/RouteJourney.jsx) |
+| Session/Routes Admin | [SessionRoutes.jsx](./voiceover-frontend/src/SessionRoutes.jsx), [SessionRoutesController.java](./src/main/java/com/voiceover/backend/controllers/SessionRoutesController.java), [RouteSessionService.java](./src/main/java/com/voiceover/backend/services/RouteSessionService.java) |
+| UC09 bản dịch/audio | [TranslationReview.jsx](./voiceover-frontend/src/TranslationReview.jsx), [TranslationReviewController.java](./src/main/java/com/voiceover/backend/controllers/TranslationReviewController.java), [TranslationReviewService.java](./src/main/java/com/voiceover/backend/services/TranslationReviewService.java) |
+| Directions đi bộ | [WalkingDirectionsService.java](./src/main/java/com/voiceover/backend/services/WalkingDirectionsService.java), [OrderedRouteMap.jsx](./voiceover-frontend/src/OrderedRouteMap.jsx) |
+| POI/AI/pipeline | [VoiceMapController.java](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java), [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [PipelineService.java](./src/main/java/com/voiceover/backend/services/PipelineService.java) |
+| Usage/statistics | [PlaybackEventController.java](./src/main/java/com/voiceover/backend/controllers/PlaybackEventController.java), [UsageEventRepository.java](./src/main/java/com/voiceover/backend/repositories/UsageEventRepository.java) |
+| Schema/kiểm chứng | [migration/](./src/main/resources/db/migration/), [src/test/](./src/test/), [verify-session-routes.ps1](./scripts/verify-session-routes.ps1) |
+
+**Lưu ý:** [VoiceMapDemoApp.jsx](./voiceover-frontend/src/VoiceMapDemoApp.jsx) không được mount trong entry point hiện tại. Chức năng có ở file demo không được dùng để kết luận ứng dụng thật đã hoàn thiện.
