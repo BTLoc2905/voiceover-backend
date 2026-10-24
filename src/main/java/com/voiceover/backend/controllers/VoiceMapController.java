@@ -48,21 +48,32 @@ public class VoiceMapController {
             @RequestParam(defaultValue = "vi") String lang,
             @RequestParam(defaultValue = "TAP_POI") String triggerType,
             @RequestParam(defaultValue = "anon-guest") String clientId) {
-        if ("AUTO_PLAY".equals(triggerType) || "TAP_POI".equals(triggerType)) {
-            usageEventRepo.save(UsageEvent.builder()
-                    .anonClientId(clientId)
-                    .eventType(triggerType)
-                    .poiId(poiId)
-                    .languageCode(lang)
-                    .build());
-        }
+        // GET includes preload/retry. PlaybackEventController records actual start/end separately.
         return ResponseEntity.ok(poiService.getPoiAudioGuide(poiId, lang));
     }
 
-    // UC03 & UC04: Tùy chỉnh lộ trình cá nhân (2 - 10 POI) và tính lại quãng đường, thời gian
+    // UC03: Tùy chỉnh lộ trình cá nhân; xem và bắt đầu dẫn đường thuộc UC04.
     @PostMapping("/public/routes/customize")
     public ResponseEntity<?> customizePersonalRoute(@RequestBody List<Long> poiIds) {
-        return ResponseEntity.ok(routeSessionService.validateAndCalculateCustomRoute(poiIds));
+        try {
+            return ResponseEntity.ok(routeSessionService.validateAndCalculateCustomRoute(poiIds));
+        } catch (WalkingDirectionsService.NoWalkingRouteException exception) {
+            return ResponseEntity.status(422).body(Map.of("code", "NO_WALKING_ROUTE", "message", exception.getMessage()));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of("code", "INVALID_ROUTE", "message", exception.getMessage()));
+        } catch (IllegalStateException exception) {
+            return ResponseEntity.status(503).body(Map.of("code", "ROUTING_UNAVAILABLE", "message", exception.getMessage()));
+        }
+    }
+
+    @GetMapping("/public/routes")
+    public ResponseEntity<?> getSuggestedRoutes() {
+        return ResponseEntity.ok(routeSessionService.getSuggestedRoutes());
+    }
+
+    @GetMapping("/public/pois")
+    public ResponseEntity<?> getRoutePoiCatalog() {
+        return ResponseEntity.ok(routeSessionService.getPublishedRoutePois());
     }
 
     @GetMapping("/public/languages")
@@ -118,30 +129,12 @@ public class VoiceMapController {
         return ResponseEntity.ok(Map.of("message", "Đã xóa POI thành công."));
     }
 
-    // UC07: Gợi ý bản nháp mô tả gốc cho POI bằng AI
-    @PostMapping("/admin/pois/ai-suggest")
-    public ResponseEntity<?> suggestDescription(@RequestBody Map<String, String> payload) {
-        return ResponseEntity.ok(poiService.generateAiDescriptionDraft(
-                payload.get("name"), payload.get("notes")
-        ));
-    }
-
-    // UC09: Kiểm duyệt, chỉnh sửa bản dịch thủ công và chỉ tạo lại Audio cho đúng ngôn ngữ đó
-    @PutMapping("/admin/pois/{poiId}/translations/{langCode}")
-    public ResponseEntity<?> updateTranslationAndRegenerateAudio(
-            @PathVariable Long poiId,
-            @PathVariable String langCode,
-            @RequestBody Map<String, String> body) {
-        pipelineService.regenerateSingleLanguageAudio(poiId, langCode, body.get("content"));
-        return ResponseEntity.ok(Map.of("message", "Đã lưu bản dịch và kích hoạt tạo lại Audio cho ngôn ngữ: " + langCode));
-    }
-
     // UC10: Tạo và lưu Route kèm thứ tự POI (poi_sequence) trong Session
-    @PostMapping("/admin/sessions/{sessionId}/routes")
+    @PostMapping(value = "/admin/sessions/{sessionId}/routes", params = "name")
     public ResponseEntity<?> createRoute(
             @PathVariable Long sessionId,
             @RequestParam String name,
-            @RequestParam(defaultValue = "PUBLISHED") String status,
+            @RequestParam(defaultValue = "DRAFT") String status,
             @RequestBody List<Long> poiSequence) {
         return ResponseEntity.ok(routeSessionService.saveRouteWithStops(sessionId, name, status, poiSequence));
     }

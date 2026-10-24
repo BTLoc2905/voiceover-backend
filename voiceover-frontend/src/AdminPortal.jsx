@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import "./AdminPortal.css";
+import SessionRoutes from "./SessionRoutes.jsx";
+import TranslationReview from "./TranslationReview.jsx";
+import "./AiDescription.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -69,10 +72,23 @@ function PoiManagement() {
   const [pois, setPois] = useState([]);
   const [form, setForm] = useState(empty);
   const [message, setMessage] = useState("");
+  const [aiDraft, setAiDraft] = useState(null);
+  const [aiNotes, setAiNotes] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
   const load = () => api("/api/admin/pois").then(setPois).catch((reason) => setMessage(reason.message));
   useEffect(() => {
     load();
   }, []);
+  useEffect(() => {
+    setAiDraft(null);
+    setAiNotes("");
+    if (!form.id) return;
+    let current = true;
+    api(`/api/admin/pois/${form.id}/ai-description/latest`).then((draft) => {
+      if (current && draft.status !== "NONE") setAiDraft(draft);
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [form.id]);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const save = async (event) => {
     event.preventDefault();
@@ -100,16 +116,72 @@ function PoiManagement() {
     if (!window.confirm(`Xác nhận xóa “${poi.name}”?`)) return;
     try { await api(`/api/admin/pois/${poi.id}`, { method: "DELETE" }); setMessage("Đã xóa POI."); load(); } catch (reason) { setMessage(reason.message); }
   };
-  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className="alert">{message}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}><label>Tên POI<input value={form.name} onChange={(e) => update("name", e.target.value)} required /></label><div className="form-grid"><label>Vĩ độ<input type="number" step="any" value={form.latitude} onChange={(e) => update("latitude", e.target.value)} required /></label><label>Kinh độ<input type="number" step="any" value={form.longitude} onChange={(e) => update("longitude", e.target.value)} required /></label></div><div className="form-grid"><label>Bán kính (m)<input type="number" min="1" value={form.radiusM} onChange={(e) => update("radiusM", e.target.value)} /></label><label>Trạng thái<select value={form.status} onChange={(e) => update("status", e.target.value)}><option value="DRAFT">Nháp</option><option value="PUBLISHED">Đã xuất bản</option><option value="HIDDEN">Ẩn</option></select></label></div><label>Thumbnail URL<input value={form.thumbnailUrl} onChange={(e) => update("thumbnailUrl", e.target.value)} /></label><label>Mô tả gốc<textarea rows="5" value={form.descriptionSource} onChange={(e) => update("descriptionSource", e.target.value)} /></label><div className="form-actions"><button className="primary" type="submit">Lưu POI</button><button className="secondary" type="button" onClick={() => setForm(empty)}>Hủy</button></div></form></article><article className="panel"><h2>Danh sách POI <span className="count">{pois.length}</span></h2><div className="table-list">{pois.map((poi) => <div className="poi-row" key={poi.id}><div><b>{poi.name}</b><small>{poi.latitude}, {poi.longitude} · bán kính {poi.radiusM}m</small></div><div className="row-actions"><span className={`status ${String(poi.status).toLowerCase()}`}>{poi.status}</span><button onClick={() => setForm(poi)}>Sửa</button><button className="danger-text" onClick={() => remove(poi)}>Xóa</button></div></div>)}{!pois.length && <p className="muted">Chưa có dữ liệu POI.</p>}</div></article></div></section>;
+  const generateDraft = async () => {
+    if (!form.id) { setMessage("Hãy lưu POI trước, sau đó chọn Sửa để tạo gợi ý AI."); return; }
+    setAiBusy(true); setMessage("");
+    try {
+      const result = await api(`/api/admin/pois/${form.id}/ai-description`, { method: "POST", body: JSON.stringify({ notes: aiNotes }) });
+      setAiDraft(result);
+      setMessage(result.status === "DRAFT" ? "Gemini đã tạo bản nháp. Hãy kiểm tra trước khi áp dụng." : result.errorMessage || "Không tạo được gợi ý.");
+    } catch (reason) { setMessage(reason.message); }
+    finally { setAiBusy(false); }
+  };
+  const saveDraft = async () => {
+    if (!aiDraft?.id) return;
+    setAiBusy(true);
+    try {
+      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}`, { method: "PUT", body: JSON.stringify({ content: aiDraft.content }) });
+      setAiDraft(result); setMessage("Đã lưu chỉnh sửa bản nháp.");
+    } catch (reason) { setMessage(reason.message); }
+    finally { setAiBusy(false); }
+  };
+  const acceptDraft = async () => {
+    if (!aiDraft?.id) return;
+    setAiBusy(true);
+    try {
+      const savedDraft = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}`, { method: "PUT", body: JSON.stringify({ content: aiDraft.content }) });
+      setAiDraft(savedDraft);
+      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}/accept`, { method: "POST" });
+      setForm((current) => ({ ...current, descriptionSource: result.content }));
+      setAiDraft(result); setMessage("Đã áp dụng mô tả và kích hoạt pipeline nội dung."); load();
+    } catch (reason) { setMessage(reason.message); }
+    finally { setAiBusy(false); }
+  };
+  const discardDraft = async () => {
+    if (!aiDraft?.id) return;
+    setAiBusy(true);
+    try {
+      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}/discard`, { method: "POST" });
+      setAiDraft(result); setMessage("Đã bỏ bản nháp; mô tả POI không thay đổi.");
+    } catch (reason) { setMessage(reason.message); }
+    finally { setAiBusy(false); }
+  };
+  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5 · UC07</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className={`alert${aiDraft?.status === "FAILED" ? " error" : ""}`}>{message}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}><label>Tên POI<input value={form.name} onChange={(e) => update("name", e.target.value)} required /></label><div className="form-grid"><label>Vĩ độ<input type="number" step="any" value={form.latitude} onChange={(e) => update("latitude", e.target.value)} required /></label><label>Kinh độ<input type="number" step="any" value={form.longitude} onChange={(e) => update("longitude", e.target.value)} required /></label></div><div className="form-grid"><label>Bán kính (m)<input type="number" min="1" value={form.radiusM} onChange={(e) => update("radiusM", e.target.value)} /></label><label>Trạng thái<select value={form.status} onChange={(e) => update("status", e.target.value)}><option value="DRAFT">Nháp</option><option value="PUBLISHED">Đã xuất bản</option><option value="HIDDEN">Ẩn</option></select></label></div><label>Thumbnail URL<input value={form.thumbnailUrl} onChange={(e) => update("thumbnailUrl", e.target.value)} /></label><label>Mô tả gốc<textarea rows="5" value={form.descriptionSource} onChange={(e) => update("descriptionSource", e.target.value)} /></label><div className="form-actions"><button className="primary" type="submit">Lưu POI</button><button className="secondary" type="button" onClick={() => { setForm(empty); setAiDraft(null); setMessage(""); }}>Hủy</button></div></form>
+      <div className="ai-draft-panel"><h3>UC07 · Gợi ý mô tả bằng Gemini</h3><p className="muted">AI chỉ tạo bản nháp. Kiểm tra nội dung trước khi chấp nhận; mô tả POI hiện tại không bị đổi nếu bạn bỏ bản nháp.</p><label>Ghi chú dữ kiện đã kiểm chứng<textarea rows="3" maxLength="4000" value={aiNotes} onChange={(event) => setAiNotes(event.target.value)} placeholder="Ví dụ: thông tin lịch sử đã xác nhận, điểm đặc biệt cần nhắc đến" /></label><button className="secondary" type="button" disabled={aiBusy || !form.id} onClick={generateDraft}>{aiBusy ? "Đang xử lý…" : aiDraft?.status === "DRAFT" ? "Tạo lại gợi ý" : "Tạo gợi ý bằng Gemini"}</button>{!form.id && <small className="muted">Lưu POI trước để tạo và lưu bản nháp.</small>}{aiDraft && <div className="ai-draft-result"><div className="form-actions"><b>Trạng thái: {aiDraft.status}</b><small>{aiDraft.provider} · {aiDraft.model}</small></div>{aiDraft.errorMessage && <div className="alert error">{aiDraft.errorMessage}</div>}{aiDraft.content && <><textarea aria-label="Nội dung bản nháp AI" rows="10" value={aiDraft.content} disabled={aiDraft.status !== "DRAFT" || aiBusy} onChange={(event) => setAiDraft((draft) => ({ ...draft, content: event.target.value }))} /><div className="form-actions"><button className="secondary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={saveDraft}>Lưu sửa bản nháp</button><button className="primary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={acceptDraft}>Chấp nhận và áp dụng</button><button className="danger-text" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={discardDraft}>Bỏ bản nháp</button></div></>}</div>}</div>
+    </article><article className="panel"><h2>Danh sách POI <span className="count">{pois.length}</span></h2><div className="table-list">{pois.map((poi) => <div className="poi-row" key={poi.id}><div><b>{poi.name}</b><small>{poi.latitude}, {poi.longitude} · bán kính {poi.radiusM}m</small></div><div className="row-actions"><span className={`status ${String(poi.status).toLowerCase()}`}>{poi.status}</span><button onClick={() => setForm(poi)}>Sửa</button><button className="danger-text" onClick={() => remove(poi)}>Xóa</button></div></div>)}{!pois.length && <p className="muted">Chưa có dữ liệu POI.</p>}</div></article></div></section>;
 }
 
 export default function AdminPortal() {
   const [account, setAccount] = useState(() => JSON.parse(localStorage.getItem("voicemap-admin") || "null"));
-  const [page, setPage] = useState(() => window.location.pathname === "/poimanagement" ? "pois" : "dashboard");
+  const resolvePage = () => window.location.pathname === "/poimanagement" ? "pois" : window.location.pathname.startsWith("/admin/sessions") ? "sessions" : window.location.pathname.startsWith("/admin/translations") ? "translations" : "dashboard";
+  const [page, setPage] = useState(resolvePage);
+  const [reviewDirty, setReviewDirty] = useState(false);
+  useEffect(() => {
+    const handleBack = () => {
+      const next = resolvePage();
+      if (page === "translations" && reviewDirty && next !== "translations" && !window.confirm("Bản dịch có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) {
+        window.history.pushState({}, "", "/admin/translations"); return;
+      }
+      setPage(next);
+    };
+    window.addEventListener("popstate", handleBack);
+    return () => window.removeEventListener("popstate", handleBack);
+  }, [page, reviewDirty]);
   const navigateAdmin = (path, nextPage) => {
+    if (page === "translations" && reviewDirty && nextPage !== page && !window.confirm("Bản dịch có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) return;
     window.history.pushState({}, "", path);
     setPage(nextPage);
   };
   if (!account) return <Login onLogin={(value) => { localStorage.setItem("voicemap-admin", JSON.stringify(value)); setAccount(value); }} />;
-  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button disabled>◎ <span>Sessions & Routes</span><em>Soon</em></button><button disabled>◌ <span>Translations & Audio</span><em>Soon</em></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { localStorage.removeItem("voicemap-admin"); setAccount(null); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : "POI Management"}</span><span className="live-status">● System operational</span></header>{page === "dashboard" ? <Dashboard /> : <PoiManagement />}</main></div>;
+  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "sessions" ? "active" : ""} onClick={() => navigateAdmin("/admin/sessions", "sessions")}>◎ <span>Sessions & Routes</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if (reviewDirty && !window.confirm("Bản dịch có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; localStorage.removeItem("voicemap-admin"); setAccount(null); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "sessions" ? "Sessions & Routes" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span className="live-status">● System operational</span></header>{page === "dashboard" ? <Dashboard /> : page === "sessions" ? <SessionRoutes /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
 }

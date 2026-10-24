@@ -1,0 +1,14 @@
+﻿.tourist-frame { width: 412px; max-width: 100%; }
+.tourist-shell { padding: 12px; }
+.tourist-frame .phone-screen { width: 100%; height: min(860px, calc(100dvh - 24px)); min-height: 400px; }
+.narration-mode { font-size: 10px; color: #536980; line-height: 1.4; }
+.narration-start-hint { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.narration-start-hint button { flex: none; padding: 9px 10px; background: #1e3050; color: #fff; border-radius: 8px; font-size: 10px; }
+.map-listen-button { margin-top: 8px; padding: 7px 10px; background: #2563eb; color: #fff; border-radius: 6px; }
+.poi-map-group-marker span { display: grid; place-items: center; width: 30px; height: 30px; border: 3px solid #fff; border-radius: 50%; background: #2563eb; color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 3px 10px #0f172a55; }
+.audio-controls button:disabled { opacity: .5; }
+@media (max-width: 600px) {
+  .demo-shell.tourist-shell { padding: 0; align-items: start; }
+  .tourist-frame { width: 100%; }
+  .tourist-frame .phone-screen { height: 100dvh; }
+}
