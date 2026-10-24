@@ -1,5 +1,13 @@
 # VoiceMap — Backend
 
+> **Bàn giao/tiến độ PRD hiện tại:** xem [phần đã có, phần chưa hoàn thiện và 10 đầu việc cho nhóm](./PRD_SOURCE_AUDIT.md). Bảng UC01–UC11 trong tài liệu này là mốc mới nhất; không dùng checklist khởi tạo cũ bên dưới để kết luận chức năng hiện tại.
+
+> UC02 GPS 23/10/2026: xem [yêu cầu, cách dùng và bằng chứng kiểm tra](./UC02_GPS_IMPLEMENTATION.md). Nghe thủ công đã có; bản mới nối tự phát GPS với bộ phát chung. Backend đã restart, kiểm API ghi lượt nghe trên MySQL và dữ liệu Session/Route sau restart đã qua; nghiệm thu GPS/audio trên thiết bị thực còn được ghi riêng.
+
+> Cập nhật Session & Routes 23/10/2026: xem [phạm vi đã duyệt, API, migration và kiểm chứng](./SESSION_ROUTES_REQUIREMENTS.md). Admin mở `/admin/sessions`; khách xem và bắt đầu Route thuộc UC04, tùy chỉnh thuộc UC03. Các ghi chú skeleton/tiến độ cũ bên dưới chưa phản ánh toàn bộ working tree.
+
+> UC09 — Kiểm duyệt bản dịch/audio (24/10/2026): vào Admin → **Translations & Audio** hoặc `/admin/translations`; chọn POI/ngôn ngữ, nghe thử, sửa/lưu riêng ngôn ngữ và theo dõi task audio. Xem [phạm vi PRD, cách dùng, API và các giới hạn nghiệm thu](./UC09_IMPLEMENTATION.md). Cần restart backend để API UC09 mới hoạt động; TTS ra file cần cấu hình Google Cloud hoặc Piper.
+
 > Hệ thống ứng dụng **thuyết minh tự động đa ngôn ngữ** (Multilingual Auto-Tour Guide System).
 > Backend phục vụ ứng dụng di động của du khách, Admin Portal và Monitoring Dashboard.
 
@@ -11,8 +19,8 @@
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED)
 
 > [!NOTE]
-> **Trạng thái hiện tại:** repository đang ở giai đoạn khởi tạo nền tảng — đã có skeleton Spring Boot, schema cơ sở dữ liệu (Flyway V1–V4), Dockerfile và CI/CD.
-> Các lớp `controllers`, `services`, `repositories`, `entities` đã được tạo thư mục nhưng **chưa có mã nghiệp vụ**. Xem [Tiến độ](#12-tiến-độ-triển-khai).
+> **Trạng thái hiện tại:** đã có mã nghiệp vụ và giao diện khách/Admin, GPS/audio, tùy chỉnh Route, quản lý Session/Routes và schema đến V12. Một số use case còn làm một phần; xem [báo cáo bàn giao PRD](./PRD_SOURCE_AUDIT.md) để biết phần đã kiểm chứng và phần còn lại.
+> Các mô tả skeleton/checklist tiến độ ở phần dưới là mốc ban đầu, chưa được cập nhật toàn bộ theo các lượt triển khai mới.
 
 ---
 

@@ -36,9 +36,9 @@ jobs:
       run: chmod +x mvnw
     - name: Build and test with Maven
       env:
-        DB_URL: jdbc:mysql://localhost:3306/voiceover?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-        DB_USERNAME: voiceover
-        DB_PASSWORD: voiceover
+        SPRING_DATASOURCE_URL: jdbc:mysql://localhost:3306/voiceover?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+        SPRING_DATASOURCE_USERNAME: voiceover
+        SPRING_DATASOURCE_PASSWORD: voiceover
       run: ./mvnw -B verify --file pom.xml
 
   publish-image:
