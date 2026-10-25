@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import "./AdminPortal.css";
 import SessionRoutes from "./SessionRoutes.jsx";
 import TranslationReview from "./TranslationReview.jsx";
@@ -14,6 +16,66 @@ async function api(path, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || "Không thể kết nối backend.");
   return body;
+}
+
+async function uploadFile(path, file) {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(`${API_BASE}${path}`, { method: "POST", body });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || "Không thể tải ảnh lên.");
+  return result;
+}
+
+function PoiLocationPicker({ latitude, longitude, radiusM, onChange }) {
+  const container = useRef(null);
+  const map = useRef(null);
+  const marker = useRef(null);
+  const radiusCircle = useRef(null);
+  const onChangeRef = useRef(onChange);
+  const initialPosition = useRef((() => {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    return Number.isFinite(lat) && lat >= -90 && lat <= 90
+      && Number.isFinite(lng) && lng >= -180 && lng <= 180
+      ? [lat, lng]
+      : [10.7626, 106.6602];
+  })());
+
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  useEffect(() => {
+    const position = initialPosition.current;
+    map.current = L.map(container.current).setView(position, position[0] === 10.7626 ? 12 : 15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map.current);
+    map.current.on("click", (event) => onChangeRef.current(event.latlng.lat, event.latlng.lng));
+    return () => {
+      map.current?.remove();
+      map.current = null;
+      marker.current = null;
+      radiusCircle.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!map.current || !Number.isFinite(lat) || lat < -90 || lat > 90
+      || !Number.isFinite(lng) || lng < -180 || lng > 180) return;
+    const position = [lat, lng];
+    if (!marker.current) {
+      marker.current = L.circleMarker(position, { radius: 8, color: "#fff", weight: 3, fillColor: "#356ff2", fillOpacity: 1 }).addTo(map.current);
+      radiusCircle.current = L.circle(position, { radius: Number(radiusM) || 50, color: "#356ff2", weight: 1, fillOpacity: 0.12 }).addTo(map.current);
+    } else {
+      marker.current.setLatLng(position);
+      radiusCircle.current.setLatLng(position).setRadius(Number(radiusM) || 50);
+    }
+  }, [latitude, longitude, radiusM]);
+
+  return <div className="poi-map-picker" ref={container} aria-label="Bản đồ chọn vị trí POI" />;
 }
 
 function Login({ onLogin }) {
@@ -70,7 +132,10 @@ function Dashboard() {
 function PoiManagement() {
   const empty = { name: "", latitude: "", longitude: "", radiusM: 50, thumbnailUrl: "", descriptionSource: "", sourceLanguageCode: "vi", status: "DRAFT" };
   const [pois, setPois] = useState([]);
+  const [languages, setLanguages] = useState([]);
   const [form, setForm] = useState(empty);
+  const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [aiDraft, setAiDraft] = useState(null);
   const [aiNotes, setAiNotes] = useState("");
@@ -78,23 +143,38 @@ function PoiManagement() {
   const load = () => api("/api/admin/pois").then(setPois).catch((reason) => setMessage(reason.message));
   useEffect(() => {
     load();
+    api("/api/public/languages").then((items) => {
+      setLanguages(items);
+      setForm((current) => current.id || items.some((item) => item.code === current.sourceLanguageCode)
+        ? current
+        : { ...current, sourceLanguageCode: items[0]?.code || "" });
+    }).catch((reason) => setMessage(`Không tải được danh mục ngôn ngữ: ${reason.message}`));
   }, []);
   useEffect(() => {
-    setAiDraft(null);
-    setAiNotes("");
     if (!form.id) return;
     let current = true;
     api(`/api/admin/pois/${form.id}/ai-description/latest`).then((draft) => {
       if (current && draft.status !== "NONE") setAiDraft(draft);
-    }).catch(() => {});
+    }).catch((reason) => {
+      if (current) setMessage(`Không tải được bản nháp AI: ${reason.message}`);
+    });
     return () => { current = false; };
   }, [form.id]);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const save = async (event) => {
     event.preventDefault();
+    setMessage("");
     const latitude = Number(form.latitude);
     const longitude = Number(form.longitude);
     const radiusM = Number(form.radiusM);
+    if (!form.name.trim()) {
+      setMessage("Tên POI không được để trống.");
+      return;
+    }
+    if (!form.descriptionSource.trim()) {
+      setMessage("Mô tả gốc không được để trống.");
+      return;
+    }
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
       setMessage("Vĩ độ phải nằm trong khoảng -90 đến 90.");
       return;
@@ -107,14 +187,40 @@ function PoiManagement() {
       setMessage("Bán kính phải lớn hơn 0 m.");
       return;
     }
+    if (!form.sourceLanguageCode || !languages.some((item) => item.code === form.sourceLanguageCode)) {
+      setMessage("Hãy chọn ngôn ngữ gốc trong danh mục.");
+      return;
+    }
+    setSaving(true);
     try {
-      await api("/api/admin/pois", { method: "POST", body: JSON.stringify({ ...form, latitude, longitude, radiusM, sourceLanguageCode: form.sourceLanguageCode || "vi" }) });
-      setForm(empty); setMessage("Đã lưu POI và kích hoạt pipeline."); load();
+      const saved = await api("/api/admin/pois", {
+        method: "POST",
+        body: JSON.stringify({ ...form, name: form.name.trim(), descriptionSource: form.descriptionSource.trim(), latitude, longitude, radiusM, sourceLanguageCode: form.sourceLanguageCode }),
+      });
+      setForm({ ...saved, latitude: String(saved.latitude), longitude: String(saved.longitude), radiusM: String(saved.radiusM) });
+      if (thumbnailFile) {
+        const result = await uploadFile(`/api/admin/pois/${saved.id}/thumbnail`, thumbnailFile);
+        setForm((current) => ({ ...current, thumbnailUrl: result.thumbnailUrl }));
+        setThumbnailFile(null);
+      }
+      setMessage("Đã lưu POI. Pipeline nội dung đã được kích hoạt.");
+      await load();
     } catch (reason) { setMessage(reason.message); }
+    finally { setSaving(false); }
   };
   const remove = async (poi) => {
     if (!window.confirm(`Xác nhận xóa “${poi.name}”?`)) return;
-    try { await api(`/api/admin/pois/${poi.id}`, { method: "DELETE" }); setMessage("Đã xóa POI."); load(); } catch (reason) { setMessage(reason.message); }
+    try {
+      await api(`/api/admin/pois/${poi.id}`, { method: "DELETE" });
+      if (form.id === poi.id) {
+        setForm(empty);
+        setThumbnailFile(null);
+        setAiDraft(null);
+        setAiNotes("");
+      }
+      setMessage("Đã xóa POI.");
+      load();
+    } catch (reason) { setMessage(reason.message); }
   };
   const generateDraft = async () => {
     if (!form.id) { setMessage("Hãy lưu POI trước, sau đó chọn Sửa để tạo gợi ý AI."); return; }
@@ -156,9 +262,32 @@ function PoiManagement() {
     } catch (reason) { setMessage(reason.message); }
     finally { setAiBusy(false); }
   };
-  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5 · UC07</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className={`alert${aiDraft?.status === "FAILED" ? " error" : ""}`}>{message}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}><label>Tên POI<input value={form.name} onChange={(e) => update("name", e.target.value)} required /></label><div className="form-grid"><label>Vĩ độ<input type="number" step="any" value={form.latitude} onChange={(e) => update("latitude", e.target.value)} required /></label><label>Kinh độ<input type="number" step="any" value={form.longitude} onChange={(e) => update("longitude", e.target.value)} required /></label></div><div className="form-grid"><label>Bán kính (m)<input type="number" min="1" value={form.radiusM} onChange={(e) => update("radiusM", e.target.value)} /></label><label>Trạng thái<select value={form.status} onChange={(e) => update("status", e.target.value)}><option value="DRAFT">Nháp</option><option value="PUBLISHED">Đã xuất bản</option><option value="HIDDEN">Ẩn</option></select></label></div><label>Thumbnail URL<input value={form.thumbnailUrl} onChange={(e) => update("thumbnailUrl", e.target.value)} /></label><label>Mô tả gốc<textarea rows="5" value={form.descriptionSource} onChange={(e) => update("descriptionSource", e.target.value)} /></label><div className="form-actions"><button className="primary" type="submit">Lưu POI</button><button className="secondary" type="button" onClick={() => { setForm(empty); setAiDraft(null); setMessage(""); }}>Hủy</button></div></form>
+  const edit = (poi) => {
+    setForm({ ...poi, latitude: String(poi.latitude), longitude: String(poi.longitude), radiusM: String(poi.radiusM) });
+    setThumbnailFile(null);
+    setAiDraft(null);
+    setAiNotes("");
+    setMessage("");
+  };
+  const resetForm = () => {
+    setForm({ ...empty, sourceLanguageCode: languages.find((item) => item.code === "vi")?.code || languages[0]?.code || "" });
+    setThumbnailFile(null);
+    setAiDraft(null);
+    setAiNotes("");
+    setMessage("");
+  };
+  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5 · UC07</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className={`alert${aiDraft?.status === "FAILED" ? " error" : ""}`}>{message}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}>
+    <label>Tên POI<input value={form.name} onChange={(event) => update("name", event.target.value)} maxLength="255" required /></label>
+    <label>Vị trí trên bản đồ <small className="muted">Nhấn vào bản đồ để chọn hoặc kéo vị trí bằng cách cập nhật tọa độ.</small></label>
+    <PoiLocationPicker key={form.id || "new-poi"} latitude={form.latitude} longitude={form.longitude} radiusM={form.radiusM} onChange={(latitude, longitude) => { update("latitude", latitude.toFixed(6)); update("longitude", longitude.toFixed(6)); }} />
+    <div className="form-grid"><label>Vĩ độ<input type="number" step="any" min="-90" max="90" value={form.latitude} onChange={(event) => update("latitude", event.target.value)} required /></label><label>Kinh độ<input type="number" step="any" min="-180" max="180" value={form.longitude} onChange={(event) => update("longitude", event.target.value)} required /></label></div>
+    <div className="form-grid"><label>Bán kính (m)<input type="number" min="1" step="1" value={form.radiusM} onChange={(event) => update("radiusM", event.target.value)} required /></label><label>Trạng thái<select value={form.status} onChange={(event) => update("status", event.target.value)} required><option value="DRAFT">Nháp</option><option value="PUBLISHED">Đã xuất bản</option><option value="HIDDEN">Ẩn</option></select></label></div>
+    <label>Ngôn ngữ gốc<select value={form.sourceLanguageCode} onChange={(event) => update("sourceLanguageCode", event.target.value)} required><option value="">Chọn ngôn ngữ</option>{languages.map((language) => <option key={language.code} value={language.code}>{language.name} ({language.code})</option>)}</select></label>
+    <label>Ảnh thumbnail <small className="muted">PNG/JPEG, tối đa 5 MB. Ảnh tải lên được lưu trong kho cục bộ của backend.</small><input type="file" accept="image/png,image/jpeg" onChange={(event) => setThumbnailFile(event.target.files?.[0] || null)} />{thumbnailFile && <small>{thumbnailFile.name} — sẽ tải lên khi lưu POI</small>}{form.thumbnailUrl && !thumbnailFile && <img className="poi-thumbnail-preview" src={form.thumbnailUrl} alt={`Thumbnail ${form.name}`} />}</label>
+    <label>Mô tả gốc<textarea rows="5" value={form.descriptionSource} onChange={(event) => update("descriptionSource", event.target.value)} required /></label>
+    <div className="form-actions"><button className="primary" type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu POI"}</button><button className="secondary" type="button" onClick={resetForm}>Tạo mới / hủy</button></div></form>
       <div className="ai-draft-panel"><h3>UC07 · Gợi ý mô tả bằng Gemini</h3><p className="muted">AI chỉ tạo bản nháp. Kiểm tra nội dung trước khi chấp nhận; mô tả POI hiện tại không bị đổi nếu bạn bỏ bản nháp.</p><label>Ghi chú dữ kiện đã kiểm chứng<textarea rows="3" maxLength="4000" value={aiNotes} onChange={(event) => setAiNotes(event.target.value)} placeholder="Ví dụ: thông tin lịch sử đã xác nhận, điểm đặc biệt cần nhắc đến" /></label><button className="secondary" type="button" disabled={aiBusy || !form.id} onClick={generateDraft}>{aiBusy ? "Đang xử lý…" : aiDraft?.status === "DRAFT" ? "Tạo lại gợi ý" : "Tạo gợi ý bằng Gemini"}</button>{!form.id && <small className="muted">Lưu POI trước để tạo và lưu bản nháp.</small>}{aiDraft && <div className="ai-draft-result"><div className="form-actions"><b>Trạng thái: {aiDraft.status}</b><small>{aiDraft.provider} · {aiDraft.model}</small></div>{aiDraft.errorMessage && <div className="alert error">{aiDraft.errorMessage}</div>}{aiDraft.content && <><textarea aria-label="Nội dung bản nháp AI" rows="10" value={aiDraft.content} disabled={aiDraft.status !== "DRAFT" || aiBusy} onChange={(event) => setAiDraft((draft) => ({ ...draft, content: event.target.value }))} /><div className="form-actions"><button className="secondary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={saveDraft}>Lưu sửa bản nháp</button><button className="primary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={acceptDraft}>Chấp nhận và áp dụng</button><button className="danger-text" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={discardDraft}>Bỏ bản nháp</button></div></>}</div>}</div>
-    </article><article className="panel"><h2>Danh sách POI <span className="count">{pois.length}</span></h2><div className="table-list">{pois.map((poi) => <div className="poi-row" key={poi.id}><div><b>{poi.name}</b><small>{poi.latitude}, {poi.longitude} · bán kính {poi.radiusM}m</small></div><div className="row-actions"><span className={`status ${String(poi.status).toLowerCase()}`}>{poi.status}</span><button onClick={() => setForm(poi)}>Sửa</button><button className="danger-text" onClick={() => remove(poi)}>Xóa</button></div></div>)}{!pois.length && <p className="muted">Chưa có dữ liệu POI.</p>}</div></article></div></section>;
+    </article>    <article className="panel"><h2>Danh sách POI <span className="count">{pois.length}</span></h2><div className="table-list">{pois.map((poi) => <div className="poi-row" key={poi.id}><div><b>{poi.name}</b><small>{poi.latitude}, {poi.longitude} · bán kính {poi.radiusM}m</small></div><div className="row-actions"><span className={`status ${String(poi.status).toLowerCase()}`}>{poi.status}</span><button onClick={() => edit(poi)}>Sửa</button><button className="danger-text" onClick={() => remove(poi)}>Xóa</button></div></div>)}{!pois.length && <p className="muted">Chưa có dữ liệu POI.</p>}</div></article></div></section>;
 }
 
 export default function AdminPortal() {

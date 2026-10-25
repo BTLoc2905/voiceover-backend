@@ -110,8 +110,25 @@ public class TranslationReviewService {
         if (!sourceHash.equals(hash(poi.getDescriptionSource() == null ? "" : poi.getDescriptionSource()))) return null;
         if (tasks.existsByPoiIdAndTargetLanguageCodeAndStatusIn(poiId, code, ACTIVE)) return null;
         Translation existing = translations.findByPoiIdAndLanguageCode(poiId, code).orElse(null);
-        if (existing != null && sourceHash.equals(existing.getSourceHash()) && "COMPLETED".equals(existing.getStatus())) return null;
-        return tasks.saveAndFlush(PipelineTask.builder().poiId(poiId).targetLanguageCode(code).taskType("TRANSLATE_TTS")
+        boolean reusableTranslation = existing != null && sourceHash.equals(existing.getSourceHash())
+                && "COMPLETED".equals(existing.getStatus()) && existing.getContent() != null && !existing.getContent().isBlank();
+        if (reusableTranslation) {
+            PipelineTask latestTask = tasks.findFirstByPoiIdAndTargetLanguageCodeOrderByIdDesc(poiId, code).orElse(null);
+            if (existing.isManualEdit() && latestTask != null && "TTS_ONLY".equals(latestTask.getTaskType())
+                    && "FAILED".equals(latestTask.getStatus())) return null;
+            Language language = requireLanguage(code);
+            Audio audio = audios.findByPoiIdAndLanguageCode(poiId, code).orElse(null);
+            if (!language.isTtsSupported() && audio != null && "TEXT_ONLY".equals(audio.getStatus())) return null;
+            if (language.isTtsSupported()) {
+                boolean audioReady = audio != null && "COMPLETED".equals(audio.getStatus())
+                        && generator.hasUsableFile(audio.getFilePath());
+                boolean alreadyTextOnly = audio != null && "TEXT_ONLY".equals(audio.getStatus())
+                        && "UNAVAILABLE".equals(generator.provider(code));
+                if (audioReady || alreadyTextOnly) return null;
+            }
+        }
+        return tasks.saveAndFlush(PipelineTask.builder().poiId(poiId).targetLanguageCode(code)
+                .taskType(reusableTranslation ? "TTS_ONLY" : "TRANSLATE_TTS")
                 .status("PROCESSING").retryCount(0).createdAt(LocalDateTime.now()).build());
     }
 

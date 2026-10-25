@@ -6,6 +6,7 @@ import com.voiceover.backend.services.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 import java.math.BigDecimal;
@@ -109,6 +110,12 @@ public class VoiceMapController {
     @PostMapping("/admin/pois")
     public ResponseEntity<?> savePoi(@RequestBody Poi poi) {
         return ResponseEntity.ok(poiService.saveOrUpdatePoi(poi));
+    }
+
+    @PostMapping(value = "/admin/pois/{poiId}/thumbnail", consumes = "multipart/form-data")
+    public ResponseEntity<?> uploadPoiThumbnail(@PathVariable Long poiId, @RequestPart("file") MultipartFile file) {
+        Poi saved = poiService.uploadThumbnail(poiId, file);
+        return ResponseEntity.ok(Map.of("thumbnailUrl", saved.getThumbnailUrl()));
     }
 
     @PostMapping("/admin/pois/with-real-image")
