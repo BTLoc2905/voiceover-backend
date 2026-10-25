@@ -331,6 +331,10 @@ export default function VoiceMapScreens() {
     {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError || gpsError} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
     {screen === "audio" && <NarrationAudioScreen player={player} playback={playback} setScreen={navigate} location={location} pois={mapPois} language={language} backScreen={audioBackScreen} MapComponent={MapArtwork} formatPoiName={localizedPoiName} />}
     {screen === "route" && <RouteScreen setScreen={navigate} location={location} language={language} onStartRoute={(value) => { setJourney({ ...value, index: 0 }); setScreen("journey"); }} />}
-    {screen === "journey" && journey && <RouteJourney journey={journey} initialLocation={location} gpsError={gpsError} onProgress={(index) => setJourney((current) => ({ ...current, index }))} onAudio={(id) => navigate("audio", id, "journey")} onExit={() => { setJourney(null); setScreen("route"); }} />}
+    {screen === "journey" && journey && <RouteJourney journey={journey} initialLocation={location} gpsError={gpsError}
+      audioBusy={["loading", "starting", "playing", "paused"].includes(playback.status)}
+      onProgress={(index) => setJourney((current) => ({ ...current, index }))}
+      onAudio={(id) => navigate("audio", id, "journey")}
+      onExit={() => { setJourney(null); setScreen("route"); }} />}
   </div></div>;
 }

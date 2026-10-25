@@ -28,12 +28,12 @@ Tài liệu phản ánh mã hiện tại, gồm UC09 vừa triển khai và gi�
 | **UC01 — Định vị GPS và xem bản đồ POI lân cận** | Có lõi; còn hoàn thiện tính nhất quán | GPS liên tục; hiển thị vị trí/sai số; catalog chỉ POI xuất bản và tọa độ hợp lệ; danh sách 500 m kèm khoảng cách; bản đồ xem toàn bộ POI đã xuất bản, nút căn khung, cụm điểm trùng tọa độ; có thể chọn nghe trên marker | API nearby cũ vẫn không lọc bán kính và còn tự ghi/bổ sung dữ liệu; danh mục ngôn ngữ phía khách đang viết cố định; cần cảnh báo GPS yếu gọn trong giao diện mới, thử từ chối quyền/mất GPS trên thiết bị thật. Xem **T08** |
 | **UC02 — Nghe và điều khiển thuyết minh đa ngôn ngữ** | Có lõi đã kiểm; chưa đủ toàn bộ audio/SLA | Nghe thủ công đã được người dùng xác nhận; một bộ phát chung cho file audio/giọng trình duyệt; tự phát khi đủ 3 giây, sai số ≤30 m, bán kính POI; hysteresis +20 m, cooldown 30 phút, ưu tiên gần nhất/hàng đợi; tải trước trong 300 m; pause/resume, tốc độ, bỏ qua; fallback/text-only có xử lý; usage start/end đã kiểm API/MySQL | Chưa nghiệm thu GPS/giọng đọc/độ trễ và file TTS provider thật trên thiết bị; tua giọng trình duyệt chỉ ước tính. Xem **T01, T02, T08, T10** |
 | **UC03 — Tùy chỉnh lộ trình cá nhân** | **Đã kiểm lõi** | Thêm/bớt, lên/xuống; 2–10 POI xuất bản, tọa độ hợp lệ, không trùng; backend kiểm quy tắc; tính lại geometry/quãng đường/thời gian đi bộ; chỉ lưu lựa chọn đã xác nhận; khôi phục trên trình duyệt | Route cá nhân hiện lưu localStorage, không phải bản ghi Route Admin hay đồng bộ nhiều thiết bị; kéo thả và offline đầy đủ đã được để sau. Xem [UC03_IMPLEMENTATION.md](./UC03_IMPLEMENTATION.md) |
-| **UC04 — Xem Route và bắt đầu dẫn đường** | Có một phần, cần tiếp tục | Route public đúng điều kiện xuất bản; xem thứ tự, tổng quãng đường/thời gian; start và chặng đi bộ từ GPS qua Directions thật; vị trí cập nhật; khi lỗi vẫn còn POI đích; có nghe, bỏ qua, điểm tiếp theo và kết thúc bằng nút | Chưa tự chuyển chặng/tự kết thúc khi đến POI; trạng thái “đã vào bán kính” hiện chỉ dựa khoảng cách, chưa dùng đủ điều kiện GPS tốt/cũ; tính lại chặng theo vị trí chưa phải phát hiện lệch polyline có tiêu chí rõ. Xem **T05** |
+| **UC04 — Xem Route và bắt đầu dẫn đường** | **Đã hoàn thiện luồng ứng dụng; cần nghiệm thu thực địa** | Route public đúng điều kiện xuất bản; xem thứ tự/tổng quãng đường/thời gian; start và chặng đi bộ từ GPS qua Directions; tự chuyển chặng/kết thúc sau dwell với GPS mới, accuracy ≤30 m; giữ xác nhận thủ công/bỏ qua/dừng; khóa chuyển tự động với các POI liền kề quá gần; phát hiện lệch polyline qua 3 GPS fix và giới hạn gọi lại Directions; chỉ vẽ geometry Directions hợp lệ | Chưa có bằng chứng chạy tuyến thật ít nhất 3 POI, GPS ngoài trời, nhiễu vị trí và lỗi Directions trên thiết bị/mạng thật. Xem **T05** |
 | **UC05 — Đăng nhập hệ thống** | Có đăng nhập cơ bản; chưa đủ phiên đăng nhập theo PRD | Form email/mật khẩu, đối chiếu tài khoản ACTIVE và BCrypt; hiển thị Portal; đăng xuất phía trình duyệt | Login trả profile và frontend lưu localStorage; chưa có phiên/token server, kiểm tra phiên trên API hoặc thu hồi phiên server. Phần quyền đang hoãn theo yêu cầu; xem **mục 7**, không coi login UI là đã bảo vệ API |
-| **UC06 — Quản lý POI** | Có CRUD cơ bản; còn thiếu nhập liệu/kiểm tra | UI tạo/sửa, trạng thái Nháp/Xuất bản/Ẩn; tọa độ nhập tay, bán kính, URL thumbnail, mô tả; xác nhận xóa; lưu JPA; backend chặn sửa/ẩn/xóa làm hỏng Route đang phục vụ và nêu Route ảnh hưởng | Chưa chọn vị trí trên map, chưa upload thumbnail thật; form chưa có chọn ngôn ngữ gốc; validation backend cho POI độc lập chưa đầy đủ; cần kiểm đầy đủ tạo/sửa/ẩn/xóa rồi đọc lại DB. Xem **T06** |
+| **UC06 — Quản lý POI** | Đã hoàn thiện phần nhập liệu/code; cần nghiệm thu luồng DB và storage thật | Form tạo/sửa, trạng thái Nháp/Xuất bản/Ẩn; map click cập nhật tọa độ và marker/vòng bán kính; chọn ngôn ngữ gốc từ catalog; upload PNG/JPEG có giới hạn và lưu cục bộ; validation backend; guard Route khi xóa/ẩn/làm mất tọa độ hợp lệ | Chưa chạy nghiệm thu tạo/sửa/đổi trạng thái/xóa và đọc lại dữ liệu MySQL/file sau restart trên POI thử riêng. 10 test UC06/Route qua. Xem **T06** |
 | **UC07 — Gợi ý mô tả POI bằng AI** | **Chưa hoàn thiện; mới có endpoint mẫu** | Endpoint nhận tên/ghi chú, trả mô tả nháp mà không lưu DB | Nội dung hiện là String.format theo mẫu, chưa gọi AI sinh mô tả; form chưa có nút nhận/chỉnh/hủy bản nháp AI; chưa có timeout 15 giây và thử lỗi đúng luồng. API tạo ảnh ở service khác không thay thế UC07. Xem **T04** |
-| **UC08 — Pipeline dịch và tạo audio tự động** | Có khung; vẫn còn việc pipeline toàn phần | Async executor, danh mục ngôn ngữ từ DB, protected terms, source hash, bản dịch/audio/task/log; Google TTS ghép WAV đủ văn bản và Piper/text-only; job UC09 phát sau commit, chống trùng theo POI/ngôn ngữ và phục hồi task UC09 dở khi restart | Dịch source language trong pipeline toàn phần vẫn mặc định vi; cơ chế phục hồi/retry task của pipeline toàn phần và nhánh TTS lỗi khi translation hash cũ chưa được giải quyết đầy đủ; chưa nghiệm thu provider thật nhiều ngôn ngữ. Xem **T01–T02** |
-| **UC09 — Kiểm duyệt và hiệu chỉnh bản dịch/audio** | **Đã có lõi UI/API; đã đọc DB thật sau restart** | Chọn POI/ngôn ngữ; xem mô tả gốc, bản dịch, audio/task/lỗi; lưu riêng bản dịch một ngôn ngữ; tạo lại từ nội dung đã lưu; revision, polling, task/retry; API trả 6 POI, mỗi POI có 16 bản dịch hoàn tất | Chưa ghi bản sửa mới lên MySQL. Hiện 14 ngôn ngữ có cờ TTS nhưng provider UNAVAILABLE; audio cả 16 ngôn ngữ/POI là TEXT_ONLY. Cần cấu hình Google/Piper để nghiệm thu file mới khách nghe được. Không có migration. Xem [UC09_IMPLEMENTATION.md](./UC09_IMPLEMENTATION.md) |
+| **UC08 — Pipeline dịch và tạo audio tự động** | **Đã sửa logic pipeline; cần nghiệm thu provider thật** | Async theo ngôn ngữ; dùng sourceLanguageCode POI; bảo toàn bản sửa tay; hash nguồn; tái sử dụng bản dịch đúng hash; chạy TTS_ONLY khi audio thiếu/lỗi; kiểm file thực trước khi bỏ qua; retry transient tối đa 3 lần với timeout/backoff; lỗi một ngôn ngữ không dừng các ngôn ngữ khác; task PROCESSING được khôi phục sau restart; Google TTS ghép WAV đủ văn bản và Piper/text-only | Chưa nghiệm thu provider thật nhiều ngôn ngữ, storage bền vững và task/data sau restart trên môi trường thật. Xem **T01–T02** |
+| **UC09 — Kiểm duyệt và hiệu chỉnh bản dịch/audio** | **Đã có lõi UI/API; logic TTS retry được đồng bộ** | Chọn POI/ngôn ngữ; xem mô tả gốc, bản dịch, audio/task/lỗi; lưu riêng bản dịch một ngôn ngữ; tạo lại từ nội dung đã lưu; revision, polling; worker retry lỗi transient tối đa 3 lần và không retry lỗi cấu hình/HTTP 4xx | Chưa ghi bản sửa mới lên MySQL. Hiện 14 ngôn ngữ có cờ TTS nhưng provider UNAVAILABLE; audio cả 16 ngôn ngữ/POI là TEXT_ONLY. Cần cấu hình Google/Piper để nghiệm thu file mới khách nghe được. Không có migration. Xem [UC09_IMPLEMENTATION.md](./UC09_IMPLEMENTATION.md) |
 | **UC10 — Quản lý Session và Route** | **Đã kiểm phạm vi được duyệt** | Tạo/sửa Session, Route, nháp dở, xuất bản có kiểm tra; thêm/bớt/lên/xuống; marker đánh số đồng bộ danh sách; preview đi bộ, quãng đường/thời gian, coverage ngôn ngữ/audio; public lọc cả Session và Route; chặn phá Route; lưu thật và còn sau restart | Không đồng nhất với hoàn tất UC04 tự chuyển chặng hoặc UC09 kiểm duyệt audio. Kéo thả/offline đầy đủ để sau; tạm đóng bằng về Nháp. Xem [SESSION_ROUTES_REQUIREMENTS.md](./SESSION_ROUTES_REQUIREMENTS.md) |
 | **UC11 — Giám sát và thống kê sử dụng** | Có dashboard đếm cơ bản; còn phần lớn monitoring PRD | Tổng POI, POI xuất bản, tổng client từng ghi nhận, lượt nghe theo POI; polling 10 giây; start/end ghi qua API thật và loại preload khỏi số lượt | Thiếu trạng thái App/DB/Pipeline thật, số task chờ/xử lý/lỗi, error rate, response time, lỗi gần nhất; active users theo cửa sổ thời gian, theo ngôn ngữ, tỷ lệ auto/tap, Route phổ biến; nhãn “System operational” đang tĩnh; polling 10 giây chưa chứng minh SLA ≤10 giây. Xem **T07** |
 
@@ -97,14 +97,12 @@ Thứ tự dưới đây ưu tiên use case và các phụ thuộc hiện có. C
 
 **Cần làm:**
 
-- Dùng sourceLanguageCode thật; không mặc định mọi văn bản đều tiếng Việt khi gọi dịch.
-- Đối chiếu vòng đời task pipeline toàn phần với job UC09 (đã có PENDING → PROCESSING → COMPLETED/FAILED, phát sau commit, chống trùng, phục hồi task dở khi restart).
-- Không bỏ qua TTS toàn phần lỗi chỉ vì bản dịch có cùng hash; phân biệt cần dịch lại và chỉ cần tạo lại audio.
-- Retry tối đa 3 lần theo PRD, lỗi ngôn ngữ này không ngừng các ngôn ngữ khác; đặt timeout thực cho request.
-- Giữ protected terms và bản sửa tay đúng quy tắc; thêm/ngừng ngôn ngữ không đòi sửa mã UI.
-- API UC09 đã đọc task/lỗi và sửa một ngôn ngữ độc lập. Kiểm tích hợp lỗi/tác vụ đồng thời với pipeline toàn phần; UC11 vẫn thiếu monitoring.
+- Đã sửa: dùng sourceLanguageCode thật, tái sử dụng bản dịch đúng hash và TTS_ONLY khi audio thiếu/hỏng; không ghi đè bản dịch Admin đã sửa.
+- Đã thêm timeout request dịch, retry/backoff giới hạn cho lỗi mạng/timeout/408/429/5xx, lỗi 4xx/cấu hình dừng sớm; lỗi một ngôn ngữ không chặn các ngôn ngữ khác.
+- Đã thêm khôi phục task TRANSLATE_TTS PROCESSING khi backend restart; kiểm tra file TTS thực trước khi coi task đã đủ.
+- Còn cần kiểm tích hợp task đồng thời UC09/UC08, file thật từ Google/Piper, storage sau restart và retry trên MySQL thật. UC11 vẫn thiếu monitoring.
 
-**Nghiệm thu còn lại:** source language đúng, tác vụ pipeline toàn phần không mắc kẹt/lưu trùng, TTS lỗi có thể retry không cần dịch lại, và thử provider thật.
+**Nghiệm thu còn lại:** thử provider thật, lưu/đọc task và file sau restart trên MySQL, cùng các tình huống lỗi đồng thời giữa UC08 và UC09.
 
 **File bắt đầu:** [PipelineService.java](./src/main/java/com/voiceover/backend/services/PipelineService.java), [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [AppConfig.java](./src/main/java/com/voiceover/backend/config/AppConfig.java), [PipelineTask.java](./src/main/java/com/voiceover/backend/entities/PipelineTask.java).
 
@@ -132,27 +130,24 @@ Thứ tự dưới đây ưu tiên use case và các phụ thuộc hiện có. C
 
 **File bắt đầu:** [AdminPortal.jsx](./voiceover-frontend/src/AdminPortal.jsx), [PoiService.java](./src/main/java/com/voiceover/backend/services/PoiService.java), [VoiceMapController.java](./src/main/java/com/voiceover/backend/controllers/VoiceMapController.java).
 
-### T05 — Hoàn tất dẫn đường tự động (ưu tiên cao, UC04)
+### T05 — Nghiệm thu thực địa dẫn đường (UC04; luồng ứng dụng đã triển khai)
 
-**Người nhận phù hợp:** frontend GPS/bản đồ.
+**Trạng thái:** RouteJourney đã tự xác nhận đến điểm với GPS mới (≤5 giây), accuracy ≤30 m, khoảng cách bảo thủ theo sai số và dwell 3 giây; chuyển chặng một lần, tự kết thúc; điểm kế tiếp quá gần yêu cầu xác nhận thủ công; audio đang bận thì không tự chuyển; lệch geometry qua ba fix mới sẽ tính lại với giới hạn 15 giây; lỗi Directions không được thay bằng đường thẳng. Có test logic cho GPS/arrival/geometry.
 
-**Cần làm:**
+**Cần nghiệm thu:**
 
-- Khi đến POI, cập nhật tiến độ/tự chuyển chặng đúng quy tắc; POI cuối tự kết thúc. Không chỉ đổi nhãn nút.
-- Dùng GPS mới và đáng tin trước khi tự xác nhận đến nơi; tránh chuyển nhiều chặng do GPS rung hoặc POI trùng tọa độ.
-- Phối hợp với bộ phát UC02 để không chồng tiếng/phát lặp; giữ tiến độ Route và cooldown audio là hai trạng thái riêng.
-- Định nghĩa và phát hiện lệch tuyến theo geometry; tính lại từ vị trí hiện tại, tránh gọi Directions liên tục.
-- Giữ nhánh bỏ qua/dừng, mất GPS, Directions lỗi và marker đích; không vẽ đường thẳng rồi gọi là đường đi bộ thực.
+- Chạy tuyến có ít nhất 3 POI và xác nhận mỗi điểm chỉ chuyển một lần, điểm cuối kết thúc đúng.
+- Thử GPS cũ, accuracy >30 m, GPS rung, hai POI gần/chồng bán kính, audio đang phát và mất GPS.
+- Đi lệch geometry để xác nhận tính lại từ vị trí mới; xác nhận Directions lỗi vẫn giữ POI đích và có thao tác thử lại.
+- Thử trên thiết bị/mạng thật và ghi nhận độ trễ, hành vi khi tab/app nền; chưa có bằng chứng nghiệm thu thực địa trong repo.
 
-**Nghiệm thu:** mô phỏng và thử thực tuyến ít nhất 3 POI, đến từng điểm chỉ chuyển một lần, đến cuối tự kết thúc; sai số lớn/GPS cũ không tự xác nhận; đi lệch tính lại, API lỗi vẫn biết đích tiếp theo.
+**File liên quan:** [RouteJourney.jsx](./voiceover-frontend/src/RouteJourney.jsx), [routeJourney.js](./voiceover-frontend/src/routeJourney.js), [routeJourney.test.js](./voiceover-frontend/src/routeJourney.test.js), [useTourLocation.js](./voiceover-frontend/src/useTourLocation.js), [OrderedRouteMap.jsx](./voiceover-frontend/src/OrderedRouteMap.jsx).
 
-**File bắt đầu:** [RouteJourney.jsx](./voiceover-frontend/src/RouteJourney.jsx), [useTourLocation.js](./voiceover-frontend/src/useTourLocation.js), [useTourNarration.js](./voiceover-frontend/src/useTourNarration.js), [OrderedRouteMap.jsx](./voiceover-frontend/src/OrderedRouteMap.jsx), [RouteSessionService.java](./src/main/java/com/voiceover/backend/services/RouteSessionService.java).
+### T06 — Hoàn thiện nhập liệu POI (UC06) — phần code đã xong
 
-### T06 — Hoàn thiện nhập liệu POI (UC06)
+**Đã làm:** chọn tọa độ trên bản đồ và đồng bộ ô nhập; upload thumbnail PNG/JPEG thật vào storage local, trả URL; chọn ngôn ngữ gốc từ catalog; validate tên/mô tả/tọa độ/bán kính/trạng thái/ngôn ngữ/thumbnail ở backend. 10 test UC06/Route qua; toàn backend 60 test qua; frontend 29 test và build production qua.
 
-**Người nhận phù hợp:** frontend form/bản đồ + backend upload/validation.
-
-**Cần làm:** chọn tọa độ trên bản đồ và đồng bộ ô nhập; upload thumbnail thật rồi lưu URL; chọn ngôn ngữ gốc từ catalog; validate tên/mô tả/tọa độ/bán kính/trạng thái/ngôn ngữ ở backend, không chỉ HTML; kiểm các lỗi lưu và form sửa dữ liệu.
+**Còn nghiệm thu:** tạo → tải lại → sửa → tải lại → ẩn/xuất bản → xóa với POI kiểm thử; xác nhận file còn truy cập sau restart; API input sai bị từ chối; các guard Route vẫn trả lỗi rõ và không làm mất dữ liệu. Chưa thao tác lên POI/Route demo.
 
 **Nghiệm thu:** tạo → tải lại → sửa → tải lại → ẩn/xuất bản → xóa với POI kiểm thử; file ảnh còn sau restart; input API sai bị từ chối; các guard Route hiện có vẫn trả lỗi rõ và không làm mất dữ liệu. Kiểm trên dữ liệu riêng, không phá Route #1 đang dùng để demo.
 
@@ -273,7 +268,7 @@ Không sửa các bản ghi demo này chỉ để chạy thử nhánh phá dữ 
 - Pipeline hoàn chỉnh từ POI bất kỳ → nhiều ngôn ngữ → file audio đủ nội dung → khách nghe trên thiết bị thật.
 - UC09 ghi/đọc lại bản sửa bằng MySQL sau restart backend mới và thử file TTS từ provider thật.
 - UC07 AI sinh văn bản thực trong 15 giây.
-- UC04 tự đi qua các chặng đến khi tự kết thúc.
+- UC04 chưa có bằng chứng nghiệm thu ngoài thực địa trên tuyến nhiều POI/thiết bị thật; luồng ứng dụng và test logic đã có.
 - Dashboard monitoring/active users/SLA đầy đủ.
 - Fresh clone/DB mới có dữ liệu giống máy hiện tại, SQL export, triển khai Docker và kết quả CI cho toàn bộ thay đổi mới.
 - Mục tiêu GPS ngoài trời ≤5 m, độ trễ audio, uptime ≥99,5%.
