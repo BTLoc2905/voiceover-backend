@@ -1,0 +1,33 @@
+.route-planner .route-map { height: 30%; min-height: 160px; }
+.route-planner .route-sheet { min-height: 0; padding-bottom: 24px; }
+.route-planner .route-title h1 { margin-bottom: 12px; font-size: 19px; }
+.route-planner .route-legend { font-size: 9px; }
+.route-planner .route-legend a { color: #1d4ed8; }
+.route-map-stop-marker span { display: grid; place-items: center; width: 28px; height: 28px; color: #fff; background: #2563eb; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 7px #0f172a55; font-size: 12px; font-weight: 700; }
+.route-picker, .route-add-section label { display: grid; gap: 6px; color: #475569; font-size: 12px; font-weight: 600; }
+.route-picker select, .route-add-section input { width: 100%; min-height: 42px; padding: 9px; color: #17233c; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 14px; }
+.route-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; margin: 14px 0; padding: 12px; color: #1e40af; background: #eff6ff; border-radius: 10px; font-size: 12px; }
+.route-message { margin: 12px 0; padding: 12px; color: #334155; background: #f1f5f9; border-radius: 9px; font-size: 12px; line-height: 1.6; }
+.route-message.error { color: #991b1b; background: #fef2f2; }
+.route-message button { display: block; min-height: 36px; margin-top: 8px; padding: 6px 12px; color: #1d4ed8; background: #fff; border: 1px solid #cbd5e1; border-radius: 7px; }
+.route-stop-list, .route-candidate-list { margin: 0; padding: 0; list-style: none; }
+.route-stop-row { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+.route-stop-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.route-stop-name strong { display: block; color: #17233c; font-size: 13px; }
+.route-stop-name small { display: block; margin-top: 4px; color: #64748b; font-size: 11px; }
+.route-stop-actions { display: flex; gap: 3px; flex: none; }
+.route-stop-actions button { min-width: 31px; min-height: 36px; padding: 6px; color: #1d4ed8; background: #eff6ff; border-radius: 6px; font-size: 14px; }
+.route-stop-actions .remove-stop { color: #b91c1c; background: #fef2f2; font-size: 11px; }
+.route-add-section { margin-top: 18px; }
+.route-add-section h2 { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
+.route-candidate-list { max-height: 210px; overflow-y: auto; margin-top: 8px; }
+.route-candidate-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; color: #334155; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+.route-candidate-list button { flex: none; min-height: 36px; padding: 7px 10px; color: #1d4ed8; background: #eff6ff; border-radius: 7px; font-size: 12px; }
+.route-hint { color: #64748b; font-size: 12px; line-height: 1.6; }
+.route-edit-actions { position: sticky; bottom: -24px; display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; margin-top: 12px; padding: 12px 0; background: #fff; }
+.route-edit-actions .primary-button { margin: 0; }
+.route-secondary-button { min-height: 42px; padding: 10px; color: #334155; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 12px; }
+.route-listen-button { width: 100%; margin-top: 10px; }
+.route-planner button:disabled { cursor: not-allowed; opacity: .45; }
+.route-planner button:focus-visible, .route-planner input:focus-visible, .route-planner select:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+@media (max-width: 380px) { .route-stop-actions button { min-width: 27px; padding: 4px; } .route-planner .bottom-sheet { padding-left: 12px; padding-right: 12px; } }
