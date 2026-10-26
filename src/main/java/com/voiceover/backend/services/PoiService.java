@@ -131,6 +131,8 @@ public class PoiService {
         if (poi.getLongitude() == null || poi.getLongitude().compareTo(BigDecimal.valueOf(-180)) < 0
                 || poi.getLongitude().compareTo(BigDecimal.valueOf(180)) > 0)
             throw new IllegalArgumentException("Kinh độ phải nằm trong khoảng -180 đến 180.");
+        if (poi.getLatitude().stripTrailingZeros().scale() > 17 || poi.getLongitude().stripTrailingZeros().scale() > 17)
+            throw new IllegalArgumentException("Tọa độ hỗ trợ tối đa 17 chữ số thập phân; hãy giảm độ chính xác trước khi lưu.");
         if (poi.getRadiusM() == null || poi.getRadiusM() <= 0)
             throw new IllegalArgumentException("Bán kính phải là số nguyên lớn hơn 0 m.");
         if (poi.getStatus() == null || !Set.of("DRAFT", "PUBLISHED", "HIDDEN").contains(poi.getStatus().toUpperCase(Locale.ROOT)))

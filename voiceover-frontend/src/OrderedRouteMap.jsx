@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./SessionRoutes.css";
+import { guestText } from "./guestUi.js";
 
-export default function OrderedRouteMap({ pois, geometry, selectedIndex, onSelect, location }) {
+export default function OrderedRouteMap({ pois, geometry, activeGeometry, selectedIndex, onSelect, location, language = "vi", formatPoiName = (name) => name }) {
   const container = useRef(null);
   const map = useRef(null);
   const select = useRef(onSelect);
@@ -24,9 +25,9 @@ export default function OrderedRouteMap({ pois, geometry, selectedIndex, onSelec
     const group = L.featureGroup().addTo(instance);
     pois.forEach((poi, index) => {
       if (poi?.latitude == null || poi?.longitude == null || !Number.isFinite(Number(poi.latitude)) || !Number.isFinite(Number(poi.longitude)) || Math.abs(Number(poi.latitude)) > 90 || Math.abs(Number(poi.longitude)) > 180) return;
-      const label = document.createElement("span"); label.textContent = `${index + 1}. ${poi.name}`;
+      const label = document.createElement("span"); label.textContent = `${index + 1}. ${formatPoiName(poi.name, language)}`;
       const marker = L.marker([Number(poi.latitude), Number(poi.longitude)], {
-        title: `${index + 1}. ${poi.name}`, keyboard: true,
+        title: `${index + 1}. ${formatPoiName(poi.name, language)}`, keyboard: true,
         icon: L.divIcon({ className: `ordered-marker${selectedIndex === index ? " selected" : ""}`,
           html: `<span>${index + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }),
       }).bindTooltip(label).addTo(group);
@@ -34,9 +35,10 @@ export default function OrderedRouteMap({ pois, geometry, selectedIndex, onSelec
       if (selectedIndex === index) marker.openTooltip();
     });
     if (geometry?.type === "LineString") L.geoJSON(geometry, { style: { color: "#356ff2", weight: 5 } }).addTo(group);
+    if (activeGeometry?.type === "LineString") L.geoJSON(activeGeometry, { style: { color: "#f97316", weight: 7 } }).addTo(group);
     if (group.getBounds().isValid()) instance.fitBounds(group.getBounds(), { padding: [35, 35], maxZoom: 16, animate: false });
     return () => group.remove();
-  }, [pois, geometry, selectedIndex]);
+  }, [pois, geometry, activeGeometry, selectedIndex, language, formatPoiName]);
   useEffect(() => {
     const instance = map.current;
     locationLayer.current?.remove();
@@ -44,12 +46,12 @@ export default function OrderedRouteMap({ pois, geometry, selectedIndex, onSelec
     if (instance && location) {
       locationLayer.current = L.circleMarker([location.lat, location.lng], {
         radius: 7, color: "white", fillColor: "#13946a", fillOpacity: 1,
-      }).bindTooltip("Vị trí của bạn").addTo(instance);
+      }).bindTooltip(guestText(language, "yourLocation")).addTo(instance);
     }
     return () => {
       locationLayer.current?.remove();
       locationLayer.current = null;
     };
-  }, [location]);
-  return <div ref={container} className="ordered-route-map" aria-label="Bản đồ thứ tự POI" />;
+  }, [location, language]);
+  return <div ref={container} className="ordered-route-map" aria-label={guestText(language, "stopOrder")} />;
 }

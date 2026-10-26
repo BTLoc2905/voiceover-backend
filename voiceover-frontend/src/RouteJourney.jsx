@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import OrderedRouteMap from "./OrderedRouteMap.jsx";
+import LanguagePicker from "./LanguagePicker.jsx";
+import { guestText } from "./guestUi.js";
 import { walkingDistance } from "./routePlan.js";
 import {
   distanceBetweenCoordinates, JourneyArrivalTracker, nextStopRequiresManualConfirmation,
@@ -8,7 +10,8 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-export default function RouteJourney({ journey, onProgress, onAudio, onExit, initialLocation, gpsError = "", audioBusy = false }) {
+export default function RouteJourney({ journey, onProgress, onAudio, onExit, initialLocation, gpsError = "", audioBusy = false, language = "vi", onLanguageChange, formatPoiName = (name) => name }) {
+  const t = (key) => guestText(language, key);
   const position = initialLocation;
   const [leg, setLeg] = useState(null);
   const [request, setRequest] = useState({ origin: null, sequence: 0 });
@@ -142,22 +145,24 @@ export default function RouteJourney({ journey, onProgress, onAudio, onExit, ini
     onProgress(index + 1);
   };
   return <main className="phone-screen route-journey">
-    <div className="journey-map"><OrderedRouteMap pois={journey.pois} selectedIndex={index} location={position} geometry={!done && currentLeg?.data ? currentLeg.data.geometry : undefined} /></div>
-    <section className="journey-content"><small>UC04 · DẪN ĐƯỜNG ĐI BỘ</small><h1>{done ? "Đã kết thúc lộ trình" : `Điểm ${index + 1}/${journey.pois.length}: ${target.name}`}</h1>
-      <p>{journey.name} · {journey.stopCount} điểm · {walkingDistance(journey.totalDistanceMeters)} · {journey.estimatedDurationMinutes} phút giữa các điểm</p>
+    <div className="journey-map"><OrderedRouteMap pois={journey.pois} selectedIndex={index} location={position}
+      geometry={journey.geometry} activeGeometry={!done ? currentLeg?.data?.geometry : undefined}
+      language={language} formatPoiName={formatPoiName} /></div>
+    <section className="journey-content"><div className="journey-language-row"><small>{t("navigationHeading")}</small><LanguagePicker language={language} onChange={onLanguageChange} /></div><h1>{done ? t("routeFinished") : `${t("stop")} ${index + 1}/${journey.pois.length}: ${formatPoiName(target.name, language)}`}</h1>
+      <p>{journey.name} · {journey.stopCount} {t("stops")} · {walkingDistance(journey.totalDistanceMeters)} · {journey.estimatedDurationMinutes} {t("betweenStops")}</p>
       {!done && <>
-        {manualArrivalRequired ? <p className="journey-notice" role="status">Điểm này ở gần điểm vừa tham quan. Hãy xác nhận thủ công để tránh tự hoàn thành nhầm hai điểm.</p>
-          : arrived ? <p className="alert" role="status">Bạn đã đến gần điểm đích bằng GPS chính xác. Đang chuyển sang điểm tiếp theo…</p>
-            : offRoute ? <p className="journey-notice" role="status">Đang tính lại đường đi bộ từ vị trí mới của bạn…</p>
-          : currentLeg?.data ? <p role="status">Từ vị trí của bạn: {walkingDistance(currentLeg.data.totalDistanceMeters)} · khoảng {currentLeg.data.estimatedDurationMinutes} phút đi bộ.</p>
-            : <p className="journey-notice" role="status">{currentLeg?.error || gpsError || (!position ? "Đang chờ vị trí GPS. Có thể xem thứ tự điểm và mở thuyết minh thủ công." : !reliableFix ? "GPS cần độ chính xác tối đa 30 m và vị trí mới trong 5 giây để xác nhận đến điểm." : "Đang tính đường đi bộ tới điểm tiếp theo…")}{currentLeg?.error && <button onClick={() => {
+        {manualArrivalRequired ? <p className="journey-notice" role="status">{t("closeStopsNotice")}</p>
+          : arrived ? <p className="alert" role="status">{t("gpsArrived")}</p>
+            : offRoute ? <p className="journey-notice" role="status">{t("rerouting")}</p>
+          : currentLeg?.data ? <p role="status">{t("fromYourLocation")}: {walkingDistance(currentLeg.data.totalDistanceMeters)} · {currentLeg.data.estimatedDurationMinutes} {t("walkingMinutes")}</p>
+            : <p className="journey-notice" role="status">{currentLeg?.error ? (language === "vi" ? currentLeg.error : t("nextLegFailed")) : gpsError ? (language === "vi" ? gpsError : t("locationUnavailable")) : !position ? t("waitingGpsManual") : !reliableFix ? t("gpsAccuracyNeeded") : t("calculatingNext")}{currentLeg?.error && <button onClick={() => {
               requestRoute(reliableJourneyFix(positionRef.current, Date.now()) ? positionRef.current : currentLeg.origin);
-            }}>Thử lại</button>}</p>}
-        <button className="primary-button" onClick={() => onAudio(target.id)}>Nghe thuyết minh điểm này</button>
-        <div className="journey-actions"><button onClick={manualProgress}>{index === journey.pois.length - 1 ? "Xác nhận hoàn thành lộ trình" : "Đã đến · điểm tiếp theo"}</button><button onClick={manualProgress}>Bỏ qua điểm này</button></div>
+            }}>{t("retry")}</button>}</p>}
+        <button className="primary-button" onClick={() => onAudio(target.id)}>{t("listenThisStop")}</button>
+        <div className="journey-actions"><button onClick={manualProgress}>{index === journey.pois.length - 1 ? t("confirmCompletion") : t("arrivedNext")}</button><button onClick={manualProgress}>{t("skipStop")}</button></div>
       </>}
-      <ol aria-label="Tiến độ tham quan">{journey.pois.map((poi, i) => <li className={i === index ? "current" : ""} key={poi.id}>{poi.name} {i < index ? "✓ Đã đi qua" : i === index ? "← Điểm đến hiện tại" : ""}</li>)}</ol>
-      <button className="route-secondary-button" onClick={onExit}>{done ? "Chọn lộ trình khác" : "Dừng dẫn đường · quay lại danh sách"}</button>
+      <ol aria-label={t("tourProgress")}>{journey.pois.map((poi, i) => <li className={i === index ? "current" : ""} key={poi.id}>{formatPoiName(poi.name, language)} {i < index ? `✓ ${t("visited")}` : i === index ? `← ${t("currentDestination")}` : ""}</li>)}</ol>
+      <button className="route-secondary-button" onClick={onExit}>{done ? t("chooseAnotherRoute") : t("stopNavigation")}</button>
     </section>
   </main>;
 }

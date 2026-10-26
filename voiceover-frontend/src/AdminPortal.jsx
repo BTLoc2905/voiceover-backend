@@ -9,6 +9,18 @@ import "./AiDescription.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+function sameCoordinateValue(first, second) {
+  const normalize = (value) => {
+    const text = String(value).trim().replace(/^\+/, "");
+    const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+    if (!match) return text;
+    const whole = match[2].replace(/^0+(?=\d)/, "");
+    const fraction = (match[3] || "").replace(/0+$/, "");
+    return `${match[1]}${whole}${fraction ? `.${fraction}` : ""}`;
+  };
+  return normalize(first) === normalize(second);
+}
+
 async function api(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -121,12 +133,12 @@ function Dashboard() {
   const load = () => api("/api/admin/monitoring/dashboard").then(setData).catch((reason) => setError(reason.message));
   useEffect(() => { load(); const timer = window.setInterval(load, 10000); return () => window.clearInterval(timer); }, []);
   return <section className="content">
-    <div className="page-heading"><div><p className="eyebrow">THỐNG KÊ SỬ DỤNG</p><h1>Dashboard</h1><p className="muted">Dữ liệu tự làm mới mỗi 10 giây.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">THỐNG KÊ SỬ DỤNG</p><h1>Dashboard</h1><p className="muted">Dữ liệu tự làm mới mỗi 10 giây. Mỗi trình duyệt khách được tính một lần; lượt nghe tăng khi audio bắt đầu phát.</p></div></div>
     {error && <div className="alert error">{error}</div>}
     <div className="metric-grid">
       {[["Số POI tham quan", data?.poiCount, "blue"], ["Số POI đang hoạt động", data?.activePoiCount, "amber"], ["Số người đã sử dụng", data?.userCount, "green"]].map(([label, value, tone]) => <div className="metric-card" key={label}><span className={`metric-icon ${tone}`}>◈</span><div><small>{label}</small><strong>{value ?? "—"}</strong></div></div>)}
     </div>
-    <article className="panel"><h2>Số người nghe tại từng địa điểm</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt nghe</b></div>)}{!data?.poiUsage?.length && <p className="muted">Chưa có POI.</p>}</div></article>
+    <article className="panel"><h2>Lượt nghe tại từng địa điểm</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt nghe</b></div>)}{!data?.poiUsage?.length && <p className="muted">Chưa có POI.</p>}</div></article>
   </section>;
 }
 
@@ -138,6 +150,7 @@ function PoiManagement() {
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [saveWarning, setSaveWarning] = useState("");
   const [aiDraft, setAiDraft] = useState(null);
   const [aiNotes, setAiNotes] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
@@ -165,8 +178,11 @@ function PoiManagement() {
   const save = async (event) => {
     event.preventDefault();
     setMessage("");
-    const latitude = Number(form.latitude);
-    const longitude = Number(form.longitude);
+    setSaveWarning("");
+    const latitudeText = String(form.latitude).trim();
+    const longitudeText = String(form.longitude).trim();
+    const latitude = Number(latitudeText);
+    const longitude = Number(longitudeText);
     const radiusM = Number(form.radiusM);
     if (!form.name.trim()) {
       setMessage("Tên POI không được để trống.");
@@ -176,11 +192,11 @@ function PoiManagement() {
       setMessage("Mô tả gốc không được để trống.");
       return;
     }
-    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    if (!latitudeText || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
       setMessage("Vĩ độ phải nằm trong khoảng -90 đến 90.");
       return;
     }
-    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    if (!longitudeText || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
       setMessage("Kinh độ phải nằm trong khoảng -180 đến 180.");
       return;
     }
@@ -196,7 +212,7 @@ function PoiManagement() {
     try {
       const saved = await api("/api/admin/pois", {
         method: "POST",
-        body: JSON.stringify({ ...form, name: form.name.trim(), descriptionSource: form.descriptionSource.trim(), latitude, longitude, radiusM, sourceLanguageCode: form.sourceLanguageCode }),
+        body: JSON.stringify({ ...form, name: form.name.trim(), descriptionSource: form.descriptionSource.trim(), latitude: latitudeText, longitude: longitudeText, radiusM, sourceLanguageCode: form.sourceLanguageCode }),
       });
       setForm({ ...saved, latitude: String(saved.latitude), longitude: String(saved.longitude), radiusM: String(saved.radiusM) });
       if (thumbnailFile) {
@@ -204,8 +220,14 @@ function PoiManagement() {
         setForm((current) => ({ ...current, thumbnailUrl: result.thumbnailUrl }));
         setThumbnailFile(null);
       }
-      setMessage("Đã lưu POI. Pipeline nội dung đã được kích hoạt.");
-      await load();
+      const stored = await api("/api/admin/pois");
+      setPois(stored);
+      const persisted = stored.find((poi) => poi.id === saved.id);
+      if (!persisted || !sameCoordinateValue(persisted.latitude, latitudeText) || !sameCoordinateValue(persisted.longitude, longitudeText)) {
+        setSaveWarning("Tọa độ đọc lại từ database khác giá trị vừa nhập. Backend có thể chưa khởi động lại để áp dụng migration V16. Hãy khởi động lại backend rồi nhập và lưu lại tọa độ.");
+      } else {
+        setMessage("Đã lưu POI. Pipeline nội dung đã được kích hoạt.");
+      }
     } catch (reason) { setMessage(reason.message); }
     finally { setSaving(false); }
   };
@@ -269,6 +291,7 @@ function PoiManagement() {
     setAiDraft(null);
     setAiNotes("");
     setMessage("");
+    setSaveWarning("");
   };
   const resetForm = () => {
     setForm({ ...empty, sourceLanguageCode: languages.find((item) => item.code === "vi")?.code || languages[0]?.code || "" });
@@ -276,11 +299,12 @@ function PoiManagement() {
     setAiDraft(null);
     setAiNotes("");
     setMessage("");
+    setSaveWarning("");
   };
-  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5 · UC07</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className={`alert${aiDraft?.status === "FAILED" ? " error" : ""}`}>{message}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}>
+  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5 · UC07</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className={`alert${aiDraft?.status === "FAILED" ? " error" : ""}`}>{message}</div>}{saveWarning && <div className="alert error" role="alert">{saveWarning}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}>
     <label>Tên POI<input value={form.name} onChange={(event) => update("name", event.target.value)} maxLength="255" required /></label>
     <label>Vị trí trên bản đồ <small className="muted">Nhấn vào bản đồ để chọn hoặc kéo vị trí bằng cách cập nhật tọa độ.</small></label>
-    <PoiLocationPicker key={form.id || "new-poi"} latitude={form.latitude} longitude={form.longitude} radiusM={form.radiusM} onChange={(latitude, longitude) => { update("latitude", latitude.toFixed(6)); update("longitude", longitude.toFixed(6)); }} />
+    <PoiLocationPicker key={form.id || "new-poi"} latitude={form.latitude} longitude={form.longitude} radiusM={form.radiusM} onChange={(latitude, longitude) => { update("latitude", String(latitude)); update("longitude", String(longitude)); }} />
     <div className="form-grid"><label>Vĩ độ<input type="number" step="any" min="-90" max="90" value={form.latitude} onChange={(event) => update("latitude", event.target.value)} required /></label><label>Kinh độ<input type="number" step="any" min="-180" max="180" value={form.longitude} onChange={(event) => update("longitude", event.target.value)} required /></label></div>
     <div className="form-grid"><label>Bán kính (m)<input type="number" min="1" step="1" value={form.radiusM} onChange={(event) => update("radiusM", event.target.value)} required /></label><label>Trạng thái<select value={form.status} onChange={(event) => update("status", event.target.value)} required><option value="DRAFT">Nháp</option><option value="PUBLISHED">Đã xuất bản</option><option value="HIDDEN">Ẩn</option></select></label></div>
     <label>Ngôn ngữ gốc<select value={form.sourceLanguageCode} onChange={(event) => update("sourceLanguageCode", event.target.value)} required><option value="">Chọn ngôn ngữ</option>{languages.map((language) => <option key={language.code} value={language.code}>{languageLabel(language.code)}</option>)}</select></label>

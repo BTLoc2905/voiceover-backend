@@ -19,10 +19,12 @@ public class Poi {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "latitude", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    @Column(name = "latitude", nullable = false, precision = 20, scale = 17)
     private BigDecimal latitude;
 
-    @Column(name = "longitude", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    @Column(name = "longitude", nullable = false, precision = 20, scale = 17)
     private BigDecimal longitude;
 
     @Column(name = "radius_m", nullable = false)

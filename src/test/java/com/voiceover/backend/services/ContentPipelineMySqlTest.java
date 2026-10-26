@@ -101,6 +101,22 @@ class ContentPipelineMySqlTest {
         assertEquals(beforeEvents, context.getBean(CommittedEvents.class).ids.size());
     }
 
+    @Test void coordinatePrecisionSurvivesActualMySqlInsertAndRead() throws Exception {
+        Poi input = newPoi();
+        input.setLatitude(new BigDecimal("10.76261234567890123"));
+        input.setLongitude(new BigDecimal("106.66021234567890123"));
+        long id = context.getBean(PoiService.class).saveOrUpdatePoi(input).getId();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement query = connection.prepareStatement("SELECT latitude, longitude FROM poi WHERE poi_id = ?")) {
+            query.setLong(1, id);
+            try (ResultSet row = query.executeQuery()) {
+                assertTrue(row.next());
+                assertEquals(0, input.getLatitude().compareTo(row.getBigDecimal("latitude")));
+                assertEquals(0, input.getLongitude().compareTo(row.getBigDecimal("longitude")));
+            }
+        }
+    }
+
     @Test void upgradeKeepsLegacyTextAndMarksManualContentStaleOnlyOnExplicitSourceSave() {
         var pois = context.getBean(PoiRepository.class); var texts = context.getBean(TranslationRepository.class);
         var tasks = context.getBean(PipelineTaskRepository.class); var audios = context.getBean(AudioRepository.class);

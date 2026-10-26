@@ -3,6 +3,7 @@ package com.voiceover.backend.controllers;
 import com.voiceover.backend.entities.*;
 import com.voiceover.backend.repositories.*;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -35,5 +36,35 @@ class PlaybackEventControllerTest {
         var input = new PlaybackEventController.Input(1L, "vi", "TAP_POI", "client", "p");
         assertThrows(IllegalStateException.class, () -> controller.record(input));
         assertTrue(controller.record(input).get("recorded"));
+    }
+    @Test void appOpenCountsAnAnonymousClientWithoutPoiOrAudio() {
+        var input = new PlaybackEventController.Input(null, null, "APP_OPEN", "new-guest", "visit-1");
+        assertTrue(controller.record(input).get("recorded"));
+        assertFalse(controller.record(input).get("recorded"));
+        var saved = org.mockito.ArgumentCaptor.forClass(UsageEvent.class);
+        verify(events).saveAndFlush(saved.capture());
+        assertEquals("APP_OPEN", saved.getValue().getEventType());
+        assertEquals("new-guest", saved.getValue().getAnonClientId());
+        assertEquals("visit-1", saved.getValue().getPlaybackId());
+        assertNull(saved.getValue().getPoiId());
+        verifyNoInteractions(pois, languages);
+    }
+    @Test void databaseDeduplicatesAnEventAfterBackendRestart() {
+        when(events.existsByAnonClientIdAndPlaybackIdAndEventType("guest", "visit-1", "APP_OPEN")).thenReturn(true);
+        var input = new PlaybackEventController.Input(null, null, "APP_OPEN", "guest", "visit-1");
+        assertFalse(new PlaybackEventController(pois, languages, events).record(input).get("recorded"));
+        verify(events, never()).saveAndFlush(any());
+    }
+    @Test void concurrentDuplicateWriteDoesNotCountTwice() {
+        when(events.existsByAnonClientIdAndPlaybackIdAndEventType("guest", "visit-1", "APP_OPEN"))
+                .thenReturn(false, true);
+        when(events.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate playback event"));
+        var input = new PlaybackEventController.Input(null, null, "APP_OPEN", "guest", "visit-1");
+        assertFalse(controller.record(input).get("recorded"));
+    }
+    @Test void appOpenCannotPretendToBeAPoiListen() {
+        var input = new PlaybackEventController.Input(1L, "vi", "APP_OPEN", "guest", "visit-1");
+        assertThrows(IllegalArgumentException.class, () -> controller.record(input));
+        verifyNoInteractions(events);
     }
 }

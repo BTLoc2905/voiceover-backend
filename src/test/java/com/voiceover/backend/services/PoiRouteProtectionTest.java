@@ -63,4 +63,14 @@ class PoiRouteProtectionTest {
         order.verify(translations).deleteAllInBatch(List.of(translation));
         order.verify(pois).deleteById(1L);
     }
+
+    @Test void publishedPoiWithoutRouteCanBeDeletedAfterConfirmation() {
+        poi("PUBLISHED");
+        when(stops.findServingRoutes(1L)).thenReturn(List.of());
+        when(stops.findReferencingRoutes(1L)).thenReturn(List.of());
+
+        service.deletePoiSafely(1L);
+
+        verify(pois).deleteById(1L);
+    }
 }

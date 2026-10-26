@@ -6,6 +6,8 @@ import java.util.List;
 public interface UsageEventRepository extends JpaRepository<UsageEvent, Long> {
     long countByEventType(String eventType);
 
+    boolean existsByAnonClientIdAndPlaybackIdAndEventType(String anonClientId, String playbackId, String eventType);
+
     @Query("select count(distinct u.anonClientId) from UsageEvent u where u.anonClientId is not null and u.anonClientId <> ''")
     long countDistinctUsers();
 

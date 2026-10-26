@@ -123,6 +123,22 @@ export default function SessionRoutes() {
       setSessionDirty(true);
     }
   }, status === "PUBLISHED" ? "Đã xuất bản Route. Khách chỉ thấy khi Session cũng đã xuất bản." : "Đã lưu nháp Route vào cơ sở dữ liệu.");
+  const deleteSession = () => {
+    if (!session.id || !abandon()) return;
+    if (!window.confirm(`Xóa Session #${session.id} cùng ${session.routes.length} Route và các điểm dừng của chúng? POI sẽ không bị xóa.`)) return;
+    act(async () => {
+      await request(`/admin/sessions/${session.id}`, { method: "DELETE" });
+      await refresh();
+    }, `Đã xóa Session #${session.id} và các Route liên quan.`);
+  };
+  const deleteRoute = () => {
+    if (!route.id || !abandon()) return;
+    if (!window.confirm(`Xóa Route #${route.id} và ${route.poiIds.length} điểm dừng? POI sẽ không bị xóa.`)) return;
+    act(async () => {
+      await request(`/admin/sessions/${session.id}/routes/${route.id}`, { method: "DELETE" });
+      await refresh(session.id);
+    }, `Đã xóa Route #${route.id}.`);
+  };
   const candidates = catalog.filter((poi) => !route.poiIds.includes(poi.id) && poi.name.toLocaleLowerCase("vi").includes(search.trim().toLocaleLowerCase("vi")));
   const readyCount = stops.filter((poi) => coverage[poi?.id]?.languages?.find((item) => item.code === language)?.audioReady).length;
 
@@ -141,7 +157,8 @@ export default function SessionRoutes() {
         <div className="poi-form"><label>Tên Session<input maxLength="255" value={session.name} disabled={busy} onChange={(e) => editSession("name", e.target.value)} /></label>
         <label>Mô tả Session<textarea rows="2" maxLength="500" value={session.description || ""} disabled={busy} onChange={(e) => editSession("description", e.target.value)} /></label>
         <div className="form-actions"><button className="secondary" disabled={busy} onClick={() => saveSession("DRAFT")}>{session.status === "PUBLISHED" ? "Tạm đóng Session (về Nháp)" : "Lưu nháp Session"}</button>
-        <button className="primary" disabled={busy} onClick={() => saveSession("PUBLISHED")}>{session.status === "PUBLISHED" ? "Lưu Session đã xuất bản" : "Xuất bản Session"}</button></div></div></article>
+        <button className="primary" disabled={busy} onClick={() => saveSession("PUBLISHED")}>{session.status === "PUBLISHED" ? "Lưu Session đã xuất bản" : "Xuất bản Session"}</button>
+        {session.id && <button className="sr-delete" disabled={busy} onClick={deleteSession}>Xóa Session</button>}</div></div></article>
       <article className="panel"><h2>Routes trong Session</h2>
         <div className="sr-route-tabs">{session.routes.map((row) => <button className={route.id === row.id ? "chosen" : "secondary"} key={row.id} disabled={busy} onClick={() => {
           if (abandonRoute()) { setRoute(row); setRouteDirty(false); setSelection(0); remember(session.id, row.id); }
@@ -162,7 +179,7 @@ export default function SessionRoutes() {
         <label className="poi-form">Tìm POI để thêm<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
         <ul className="sr-candidates">{candidates.map((poi) => <li key={poi.id}><span>{poi.name} <small>{poi.status}</small></span><button className="secondary" disabled={busy || !session.id} aria-label={`Thêm ${poi.name}`} onClick={() => editRoute("poiIds", [...route.poiIds, poi.id])}>＋ Thêm</button></li>)}</ul></div>
         <div><OrderedRouteMap pois={stops} geometry={current?.data?.geometry} selectedIndex={selection} onSelect={setSelection} /><p className="muted">Marker đánh số theo danh sách. Chọn điểm trong danh sách hoặc trên bản đồ. Đường đi bộ: FOSSGIS / OSRM.</p></div></div>
-        <div className="form-actions"><button className="secondary" disabled={busy || !session.id} onClick={() => saveRoute("DRAFT")}>Lưu nháp Route</button><button className="primary" disabled={busy || !session.id} onClick={() => saveRoute("PUBLISHED")}>{route.status === "PUBLISHED" ? "Lưu Route đã xuất bản" : "Xuất bản Route"}</button><span className="muted">{busy ? "Đang lưu…" : dirty ? "Có thay đổi chưa lưu" : route.id ? `Route #${route.id} · ${route.status}` : "Route mới"}</span></div>
+        <div className="form-actions"><button className="secondary" disabled={busy || !session.id} onClick={() => saveRoute("DRAFT")}>Lưu nháp Route</button><button className="primary" disabled={busy || !session.id} onClick={() => saveRoute("PUBLISHED")}>{route.status === "PUBLISHED" ? "Lưu Route đã xuất bản" : "Xuất bản Route"}</button>{route.id && <button className="sr-delete" disabled={busy} onClick={deleteRoute}>Xóa Route</button>}<span className="muted">{busy ? "Đang lưu…" : dirty ? "Có thay đổi chưa lưu" : route.id ? `Route #${route.id} · ${route.status}` : "Route mới"}</span></div>
       </article></div></div>
     </>}
   </section>;

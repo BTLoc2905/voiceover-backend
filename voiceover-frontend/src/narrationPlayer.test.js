@@ -114,6 +114,28 @@ test("switching POIs and languages stops the previous real-file playback before 
     assert.equal(pauses, 2);
   } finally { player.dispose(); }
 });
+test("leaving narration stops a playing MP3 and cancels a pending guide", async () => {
+  let source = "", pauses = 0;
+  const media = { getAttribute: () => source, set src(value) { source = value; },
+    removeAttribute() { source = ""; }, pause() { pauses++; }, load() {}, play() { return Promise.resolve(); } };
+  let resolvePending;
+  const { player } = setup({ createAudio: () => media,
+    getGuide: (id) => id === 1 ? Promise.resolve({ poiId: 1, audioUrl: "/1.mp3", activeLanguage: "vi" })
+      : new Promise((resolve) => { resolvePending = resolve; }) });
+  try {
+    await player.load(1, "vi"); player.play(); media.onplaying();
+    player.stop();
+    assert.equal(player.getSnapshot().status, "idle");
+    assert.equal(source, "");
+    assert.equal(pauses, 1);
+    const pending = player.load(2, "vi");
+    player.stop();
+    resolvePending({ poiId: 2, audioUrl: "/2.mp3", activeLanguage: "vi" });
+    await pending;
+    assert.equal(player.getSnapshot().status, "idle");
+    assert.equal(source, "");
+  } finally { player.dispose(); }
+});
 test("segmentation preserves trailing narration and long sentences without punctuation", () => {
   const text = "Câu có dấu. Phần cuối vẫn được đọc";
   assert.equal(narrationSegments(text).join(""), text);

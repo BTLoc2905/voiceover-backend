@@ -63,6 +63,23 @@ class PoiManagementValidationTest {
         order.verify(pipeline).enqueueSource(saved);
     }
 
+    @Test
+    void preservesSeventeenDecimalPlacesAndRejectsExcessInsteadOfRounding() {
+        when(languages.findById("vi")).thenReturn(Optional.of(Language.builder().code("vi").isActive(true).build()));
+        when(pois.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        Poi exact = validPoi();
+        exact.setLatitude(new BigDecimal("10.76261234567890123"));
+        exact.setLongitude(new BigDecimal("106.66021234567890123"));
+        Poi saved = service.saveOrUpdatePoi(exact);
+        assertEquals("10.76261234567890123", saved.getLatitude().toPlainString());
+        assertEquals("106.66021234567890123", saved.getLongitude().toPlainString());
+
+        Poi tooPrecise = validPoi();
+        tooPrecise.setLatitude(new BigDecimal("10.762612345678901234"));
+        assertThrows(IllegalArgumentException.class, () -> service.saveOrUpdatePoi(tooPrecise));
+        verify(pois, times(1)).saveAndFlush(any());
+    }
+
     @Test void rejectsAnOldSourceRevisionBeforeWritingAnything() {
         Poi current = validPoi(); current.setId(1L); current.setContentRevision(2);
         when(pois.findForUpdate(1L)).thenReturn(Optional.of(current));

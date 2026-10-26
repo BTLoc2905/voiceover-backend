@@ -29,6 +29,20 @@ class PoiJsonContractTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void acceptsExactDecimalCoordinateStringsWithoutDoubleConversion() throws Exception {
+        String json = """
+                {"name":"Precision test","latitude":"10.76261234567890123","longitude":"106.66021234567890123",
+                 "radiusM":50,"descriptionSource":"Precision test.","sourceLanguageCode":"vi","status":"DRAFT"}
+                """;
+        Poi poi = new ObjectMapper().readValue(json, Poi.class);
+        assertEquals("10.76261234567890123", poi.getLatitude().toPlainString());
+        assertEquals("106.66021234567890123", poi.getLongitude().toPlainString());
+        String responseJson = new ObjectMapper().writeValueAsString(poi);
+        org.junit.jupiter.api.Assertions.assertTrue(responseJson.contains("\"latitude\":\"10.76261234567890123\""));
+        org.junit.jupiter.api.Assertions.assertTrue(responseJson.contains("\"longitude\":\"106.66021234567890123\""));
+    }
+
     @RestController
     static class Probe {
         @PostMapping("/poi-probe")
