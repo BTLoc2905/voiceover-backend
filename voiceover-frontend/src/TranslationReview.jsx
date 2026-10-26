@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { NarrationPlayer } from "./narrationPlayer.js";
+import { languageLabel } from "./languageDisplay.js";
 import "./TranslationReview.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const LABELS = { MISSING: "Chưa có", PENDING: "Đang chờ", PROCESSING: "Đang xử lý", COMPLETED: "Hoàn tất", FAILED: "Thất bại", TEXT_ONLY: "Chỉ văn bản" };
+const LABELS = { MISSING: "Chưa có", PENDING: "Đang chờ", PROCESSING: "Đang xử lý", COMPLETED: "Hoàn tất", FAILED: "Thất bại", TEXT_ONLY: "Chỉ văn bản", STALE: "Cần rà soát theo nguồn mới" };
 function statusLabel(value) { return LABELS[value] || value || "Chưa có"; }
 function timestamp(value) { return value ? new Date(value).toLocaleString("vi-VN") : "—"; }
 function playableUrl(value) {
@@ -139,18 +140,19 @@ export default function TranslationReview({ onDirtyChange }) {
     {!pois.length && !error && <p className="muted">Chưa có POI để kiểm duyệt.</p>}
     {loading && <p role="status" className="muted">Đang tải bản dịch…</p>}
     {data && <div className="tr-layout">
-      <aside className="panel tr-languages"><h2>Ngôn ngữ <span className="count">{data.languages.length}</span></h2><div className="tr-language-list">{data.languages.map((language) => <button type="button" key={language.code} className={language.code === code ? "selected" : ""} disabled={submitting} aria-pressed={language.code === code} onClick={() => switchLanguage(language.code)}><strong>{language.name} <small>{language.code}</small></strong><span>{language.active ? `Bản dịch: ${statusLabel(language.translation.status)}` : "Đã ngừng hoạt động"}</span><span>Audio: {statusLabel(language.audio.status)}</span></button>)}</div></aside>
-      {row && <div className="tr-workspace"><article className="panel"><div className="tr-editor-heading"><h2>{row.name} <span className="count">{row.code}</span></h2><span className={`tr-state ${row.translation.status.toLowerCase()}`}>{statusLabel(row.translation.status)}</span></div>
+      <aside className="panel tr-languages"><h2>Ngôn ngữ <span className="count">{data.languages.length}</span></h2><div className="tr-language-list">{data.languages.map((language) => <button type="button" key={language.code} className={language.code === code ? "selected" : ""} disabled={submitting} aria-pressed={language.code === code} onClick={() => switchLanguage(language.code)}><strong>{languageLabel(language.code)}</strong><span>{language.active ? `Bản dịch: ${statusLabel(language.translation.status)}` : "Đã ngừng hoạt động"}</span><span>Audio: {statusLabel(language.audio.status)}</span></button>)}</div></aside>
+      {row && <div className="tr-workspace"><article className="panel"><div className="tr-editor-heading"><h2>{languageLabel(row.code)}</h2><span className={`tr-state ${row.translation.status.toLowerCase()}`}>{statusLabel(row.translation.status)}</span></div>
         {!row.active && <p className="tr-notice">Ngôn ngữ đã ngừng hoạt động; chỉ xem nội dung.</p>}
         {!row.translation.id && <p className="tr-notice" role="status">Chưa có bản dịch cho ngôn ngữ này. Kiểm tra pipeline trước khi hiệu chỉnh.</p>}
         {busy && <p className="tr-notice" role="status">Đang xử lý ngôn ngữ này. Nội dung được bảo vệ cho đến khi tác vụ kết thúc.</p>}
         {changedOnServer && dirty && <p className="alert error" role="alert">Bản dịch trên máy chủ đã thay đổi. Phần đang soạn được giữ nguyên; sao chép nếu cần rồi chọn Tải lại nội dung.</p>}
-        <details className="tr-source"><summary>Mô tả gốc ({data.poi.sourceLanguageCode || "vi"})</summary><p>{data.poi.descriptionSource || "Chưa có mô tả gốc."}</p></details>
+        <details className="tr-source"><summary>Mô tả gốc ({languageLabel(data.poi.sourceLanguageCode || "vi")})</summary><p>{data.poi.descriptionSource || "Chưa có mô tả gốc."}</p></details>
         <label className="tr-editor-label" htmlFor="review-content">Nội dung bản dịch</label><textarea id="review-content" value={editorKey === `${poiId}:${code}` ? draft : ""} disabled={!editable} onChange={(event) => updateDraft(event.target.value)} aria-describedby="review-editor-meta" />
         <div id="review-editor-meta" className="tr-editor-meta"><span>{dirty ? "Có thay đổi chưa lưu" : row.translation.manualEdit ? "Đã hiệu chỉnh thủ công" : "Bản dịch hiện tại"}</span><span>{byteCount.toLocaleString("vi-VN")} / 60.000 byte</span></div>
         {byteCount > 60000 && <p className="alert error">Nội dung vượt giới hạn lưu trữ. Hãy rút gọn trước khi lưu.</p>}
-        <p className="muted">Cập nhật: {timestamp(row.translation.updatedAt)}. Lưu bản dịch chỉ tạo lại audio của ngôn ngữ đang chọn.</p>
-        <div className="form-actions tr-actions"><button type="button" className="primary" disabled={!editable || !dirty || !draft.trim() || byteCount > 60000 || changedOnServer} onClick={() => submit(false)}>{submitting ? "Đang gửi…" : "Lưu bản dịch & tạo lại audio"}</button><button type="button" className="secondary" disabled={!editable || dirty || changedOnServer || row.translation.status !== "COMPLETED" || !row.translation.content?.trim()} onClick={() => submit(true)}>Tạo lại audio</button></div>
+        {row.translation.status === "STALE" && <p className="tr-notice" role="status">Mô tả gốc hoặc thuật ngữ đã thay đổi. Nội dung sửa tay được giữ lại; hãy rà soát và bấm Lưu để áp dụng theo nguồn mới.</p>}
+        <p className="muted">Cập nhật: {timestamp(row.translation.updatedAt)}. Nguồn phiên bản {data.poi.contentRevision ?? 0}. Lưu bản dịch chỉ tạo lại audio của ngôn ngữ đang chọn.</p>
+        <div className="form-actions tr-actions"><button type="button" className="primary" disabled={!editable || (!dirty && row.translation.status !== "STALE") || !draft.trim() || byteCount > 60000 || changedOnServer} onClick={() => submit(false)}>{submitting ? "Đang gửi…" : "Lưu bản dịch & tạo lại audio"}</button><button type="button" className="secondary" disabled={!editable || dirty || changedOnServer || row.translation.status !== "COMPLETED" || !row.translation.content?.trim()} onClick={() => submit(true)}>Tạo lại audio</button></div>
         {dirty && <p className="muted">Lưu thay đổi trước khi yêu cầu tạo lại audio từ bản dịch đã lưu.</p>}
       </article>
       <article className="panel tr-audio"><div className="tr-editor-heading"><h2>Nghe thử & kết quả xử lý</h2><span className={`tr-state ${row.audio.status.toLowerCase()}`}>{statusLabel(row.audio.status)}</span></div>

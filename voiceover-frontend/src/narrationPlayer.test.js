@@ -93,6 +93,27 @@ test("HTML audio uses the same single player, catches autoplay blocks, and recor
     assert.equal(events[1].eventType, "AUDIO_COMPLETED");
   } finally { player.dispose(); }
 });
+
+test("switching POIs and languages stops the previous real-file playback before starting the next", async () => {
+  let source = "", pauses = 0, plays = 0, created = 0;
+  const media = { paused: true, getAttribute: () => source, set src(value) { source = value; },
+    removeAttribute() { source = ""; }, pause() { pauses++; this.paused = true; }, load() {},
+    play() { plays++; this.paused = false; return Promise.resolve(); } };
+  const { player } = setup({ createAudio: () => { created++; return media; },
+    getGuide: async (id, language) => ({ poiId: id, activeLanguage: language, audioUrl: `/${id}-${language}.mp3` }) });
+  try {
+    await player.load(1, "vi"); player.play(); media.onplaying();
+    assert.equal(source, "/1-vi.mp3"); assert.equal(media.paused, false);
+    await player.load(2, "vi");
+    assert.equal(media.paused, true); assert.equal(source, "");
+    player.play(); media.onplaying(); assert.equal(source, "/2-vi.mp3");
+    await player.load(2, "en");
+    assert.equal(media.paused, true); assert.equal(source, "");
+    player.play(); media.onplaying(); assert.equal(source, "/2-en.mp3");
+    assert.equal(created, 1); assert.equal(plays, 3); assert.equal(player.getSnapshot().status, "playing");
+    assert.equal(pauses, 2);
+  } finally { player.dispose(); }
+});
 test("segmentation preserves trailing narration and long sentences without punctuation", () => {
   const text = "Câu có dấu. Phần cuối vẫn được đọc";
   assert.equal(narrationSegments(text).join(""), text);

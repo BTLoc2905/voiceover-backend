@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import "./AdminPortal.css";
 import SessionRoutes from "./SessionRoutes.jsx";
 import TranslationReview from "./TranslationReview.jsx";
+import { languageLabel } from "./languageDisplay.js";
 import "./AiDescription.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -248,7 +249,7 @@ function PoiManagement() {
       const savedDraft = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}`, { method: "PUT", body: JSON.stringify({ content: aiDraft.content }) });
       setAiDraft(savedDraft);
       const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}/accept`, { method: "POST" });
-      setForm((current) => ({ ...current, descriptionSource: result.content }));
+      setForm((current) => ({ ...current, descriptionSource: result.content, contentRevision: result.contentRevision }));
       setAiDraft(result); setMessage("Đã áp dụng mô tả và kích hoạt pipeline nội dung."); load();
     } catch (reason) { setMessage(reason.message); }
     finally { setAiBusy(false); }
@@ -282,7 +283,7 @@ function PoiManagement() {
     <PoiLocationPicker key={form.id || "new-poi"} latitude={form.latitude} longitude={form.longitude} radiusM={form.radiusM} onChange={(latitude, longitude) => { update("latitude", latitude.toFixed(6)); update("longitude", longitude.toFixed(6)); }} />
     <div className="form-grid"><label>Vĩ độ<input type="number" step="any" min="-90" max="90" value={form.latitude} onChange={(event) => update("latitude", event.target.value)} required /></label><label>Kinh độ<input type="number" step="any" min="-180" max="180" value={form.longitude} onChange={(event) => update("longitude", event.target.value)} required /></label></div>
     <div className="form-grid"><label>Bán kính (m)<input type="number" min="1" step="1" value={form.radiusM} onChange={(event) => update("radiusM", event.target.value)} required /></label><label>Trạng thái<select value={form.status} onChange={(event) => update("status", event.target.value)} required><option value="DRAFT">Nháp</option><option value="PUBLISHED">Đã xuất bản</option><option value="HIDDEN">Ẩn</option></select></label></div>
-    <label>Ngôn ngữ gốc<select value={form.sourceLanguageCode} onChange={(event) => update("sourceLanguageCode", event.target.value)} required><option value="">Chọn ngôn ngữ</option>{languages.map((language) => <option key={language.code} value={language.code}>{language.name} ({language.code})</option>)}</select></label>
+    <label>Ngôn ngữ gốc<select value={form.sourceLanguageCode} onChange={(event) => update("sourceLanguageCode", event.target.value)} required><option value="">Chọn ngôn ngữ</option>{languages.map((language) => <option key={language.code} value={language.code}>{languageLabel(language.code)}</option>)}</select></label>
     <label>Ảnh thumbnail <small className="muted">PNG/JPEG, tối đa 5 MB. Ảnh tải lên được lưu trong kho cục bộ của backend.</small><input type="file" accept="image/png,image/jpeg" onChange={(event) => setThumbnailFile(event.target.files?.[0] || null)} />{thumbnailFile && <small>{thumbnailFile.name} — sẽ tải lên khi lưu POI</small>}{form.thumbnailUrl && !thumbnailFile && <img className="poi-thumbnail-preview" src={form.thumbnailUrl} alt={`Thumbnail ${form.name}`} />}</label>
     <label>Mô tả gốc<textarea rows="5" value={form.descriptionSource} onChange={(event) => update("descriptionSource", event.target.value)} required /></label>
     <div className="form-actions"><button className="primary" type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu POI"}</button><button className="secondary" type="button" onClick={resetForm}>Tạo mới / hủy</button></div></form>

@@ -1,12 +1,14 @@
 # VoiceMap — Backend
 
+> **Pipeline 25/10/2026:** đã thêm phiên bản nguồn, task DB có snapshot/lease, kiểm kết quả cũ và trạng thái bản sửa tay cần rà soát. Có migration **V14**; xem [cách nâng cấp, hợp đồng API và kết quả kiểm chứng](./PIPELINE_VERSIONING_IMPLEMENTATION.md). Ghi chú pipeline/worker cũ phía dưới có thể chưa phản ánh thay đổi này.
+
 > **Bàn giao/tiến độ PRD hiện tại:** xem [phần đã có, phần chưa hoàn thiện và 10 đầu việc cho nhóm](./PRD_SOURCE_AUDIT.md). Bảng UC01–UC11 trong tài liệu này là mốc mới nhất; không dùng checklist khởi tạo cũ bên dưới để kết luận chức năng hiện tại.
 
 > UC02 GPS 23/10/2026: xem [yêu cầu, cách dùng và bằng chứng kiểm tra](./UC02_GPS_IMPLEMENTATION.md). Nghe thủ công đã có; bản mới nối tự phát GPS với bộ phát chung. Backend đã restart, kiểm API ghi lượt nghe trên MySQL và dữ liệu Session/Route sau restart đã qua; nghiệm thu GPS/audio trên thiết bị thực còn được ghi riêng.
 
 > Cập nhật Session & Routes 23/10/2026: xem [phạm vi đã duyệt, API, migration và kiểm chứng](./SESSION_ROUTES_REQUIREMENTS.md). Admin mở `/admin/sessions`; khách xem và bắt đầu Route thuộc UC04, tùy chỉnh thuộc UC03. Các ghi chú skeleton/tiến độ cũ bên dưới chưa phản ánh toàn bộ working tree.
 
-> UC09 — Kiểm duyệt bản dịch/audio (24/10/2026): vào Admin → **Translations & Audio** hoặc `/admin/translations`; chọn POI/ngôn ngữ, nghe thử, sửa/lưu riêng ngôn ngữ và theo dõi task audio. Xem [phạm vi PRD, cách dùng, API và các giới hạn nghiệm thu](./UC09_IMPLEMENTATION.md). Cần restart backend để API UC09 mới hoạt động; TTS ra file cần cấu hình Google Cloud hoặc Piper.
+> UC09 — Kiểm duyệt bản dịch/audio (24/10/2026): vào Admin → **Translations & Audio** hoặc `/admin/translations`; chọn POI/ngôn ngữ, nghe thử, sửa/lưu riêng ngôn ngữ và theo dõi task audio. Xem [phạm vi PRD, cách dùng, API và các giới hạn nghiệm thu](./UC09_IMPLEMENTATION.md). `TTS_PROVIDER=edge` tạo MP3 qua helper Python; `google-standard` giữ WAV/giọng Standard là lựa chọn riêng. Xem [cách cài và kiểm chứng](./PIPELINE_VERSIONING_IMPLEMENTATION.md#edge-tts--26102026).
 
 > Hệ thống ứng dụng **thuyết minh tự động đa ngôn ngữ** (Multilingual Auto-Tour Guide System).
 > Backend phục vụ ứng dụng di động của du khách, Admin Portal và Monitoring Dashboard.
@@ -286,7 +288,7 @@ erDiagram
 
 ### Ghi chú về mô hình
 
-- **Ngôn ngữ:** 16 ngôn ngữ được seed, trong đó 14 hỗ trợ TTS; `ms` và `hi` chỉ có bản văn bản (`tts_supported = FALSE`). Chỉ **một** ngôn ngữ được đặt `is_default` (ràng buộc bằng generated column `default_marker` + unique key).
+- **Ngôn ngữ:** 16 ngôn ngữ được seed; migration V15 bật TTS cho `ms` và `hi`, nên cả 16 có thể tạo audio khi Edge-TTS là provider. Chỉ **một** ngôn ngữ được đặt `is_default` (ràng buộc bằng generated column `default_marker` + unique key).
 - **Bản dịch / Audio:** `translation` unique theo `(poi_id, language_code)`; `audio` quan hệ 1–1 với `translation`. `source_hash` dùng để phát hiện mô tả gốc không đổi → không dịch lại. `is_manual_edit` đánh dấu bản dịch do Admin chỉnh sửa tay.
 - **Route:** một Route gồm 2–10 `route_stop`, thứ tự `stop_order` (1–10) là duy nhất trong Route.
 - **Xoá POI:** `pipeline_task` xoá theo `ON DELETE CASCADE`; `route_stop` **không** cascade theo POI — nghiệp vụ chặn xoá POI đang nằm trong Route/Session đã xuất bản (UC06, PRD F-05).

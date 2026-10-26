@@ -11,10 +11,12 @@ import static org.mockito.Mockito.*;
 class PoiRouteProtectionTest {
     final PoiRepository pois = mock(PoiRepository.class);
     final RouteStopRepository stops = mock(RouteStopRepository.class);
-    final PipelineService pipeline = mock(PipelineService.class);
+    final TranslationRepository translations = mock(TranslationRepository.class);
+    final AudioRepository audios = mock(AudioRepository.class);
+    final TranslationReviewService pipeline = mock(TranslationReviewService.class);
     final LanguageRepository languages = mock(LanguageRepository.class);
-    final PoiService service = new PoiService(pois, mock(TranslationRepository.class), mock(AudioRepository.class),
-            languages, stops, pipeline, mock(OpenStreetMapPoiService.class), mock(WikimediaImageService.class), mock(TranslationReviewService.class), mock(PoiThumbnailService.class));
+    final PoiService service = new PoiService(pois, translations, audios,
+            languages, stops, pipeline, mock(PoiThumbnailService.class));
     Poi poi(String status) {
         Poi poi = Poi.builder().id(1L).name("POI").descriptionSource("Mô tả").sourceLanguageCode("vi").status(status).latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).build();
         when(languages.findById("vi")).thenReturn(Optional.of(Language.builder().code("vi").isActive(true).build()));
@@ -32,7 +34,7 @@ class PoiRouteProtectionTest {
     }
     @Test void closedSessionAllowsPoiDraftButReferencedPoiDeletionHasClearConflict() {
         when(stops.findServingRoutes(1L)).thenReturn(List.of());
-        Poi draft = poi("DRAFT"); when(pois.save(draft)).thenReturn(draft);
+        Poi draft = poi("DRAFT"); when(pois.saveAndFlush(draft)).thenReturn(draft);
         assertEquals("DRAFT", service.saveOrUpdatePoi(draft).getStatus());
         when(stops.findReferencingRoutes(1L)).thenReturn(List.of(Route.builder().id(9L).name("Bản nháp còn tham chiếu").build()));
         assertTrue(assertThrows(RouteConflictException.class, () -> service.deletePoiSafely(1L)).getMessage().contains("Bản nháp còn tham chiếu"));
@@ -45,5 +47,20 @@ class PoiRouteProtectionTest {
             assertThrows(IllegalArgumentException.class, () -> service.getPoiAudioGuide(1L, "vi"));
         }
         verifyNoInteractions(pipeline);
+    }
+
+    @Test void unreferencedPoiDeletesAudioThenTranslationThenPoi() {
+        poi("DRAFT");
+        Audio audio = Audio.builder().id(10L).poiId(1L).translationId(20L).languageCode("vi").build();
+        Translation translation = Translation.builder().id(20L).poiId(1L).languageCode("vi").build();
+        when(audios.findByPoiId(1L)).thenReturn(List.of(audio));
+        when(translations.findByPoiId(1L)).thenReturn(List.of(translation));
+
+        service.deletePoiSafely(1L);
+
+        var order = inOrder(audios, translations, pois);
+        order.verify(audios).deleteAllInBatch(List.of(audio));
+        order.verify(translations).deleteAllInBatch(List.of(translation));
+        order.verify(pois).deleteById(1L);
     }
 }

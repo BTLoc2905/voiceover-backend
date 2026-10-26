@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 @EnableAsync
+@org.springframework.scheduling.annotation.EnableScheduling
 public class AppConfig implements WebMvcConfigurer {
     @Value("${app.audio.storage:storage/audio}")
     private String audioStorage;

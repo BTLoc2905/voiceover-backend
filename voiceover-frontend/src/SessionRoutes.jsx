@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import OrderedRouteMap from "./OrderedRouteMap.jsx";
+import { languageLabel } from "./languageDisplay.js";
 import { moveRouteStop, validateRouteStops, walkingDistance } from "./routePlan.js";
 import "./SessionRoutes.css";
 
@@ -149,9 +150,9 @@ export default function SessionRoutes() {
         {!session.id && <p className="muted">Lưu nháp Session trước để tạo Route.</p>}
         <div className="poi-form"><label>Tên Route<input maxLength="255" value={route.name} disabled={busy || !session.id} onChange={(e) => editRoute("name", e.target.value)} /></label></div>
         <div className="sr-metrics" aria-live="polite"><b>{stops.length} điểm</b><span>{current?.data ? `${walkingDistance(current.data.totalDistanceMeters)} · ${current.data.estimatedDurationMinutes} phút đi bộ` : validation ? "Chưa đủ điều kiện tính đường" : current?.error ? "Chưa có đường đi bộ" : "Đang tính đường đi bộ…"}</span>
-        <span>{readyCount}/{stops.length} điểm có audio · {language}</span></div>
+        <span>{readyCount}/{stops.length} điểm có audio · {languageLabel(language)}</span></div>
         {(validation || current?.error) && <div className="sr-warning">{validation || current.error} <small>Vẫn có thể lưu nháp. Xuất bản cần 2–10 POI hợp lệ, đã xuất bản, không trùng.</small>{current?.error && <button className="secondary" onClick={() => setRetry((n) => n + 1)}>Tính lại</button>}</div>}
-        <div className="sr-editor"><div><label className="sr-language">Ngôn ngữ audio<select value={language} onChange={(e) => setLanguage(e.target.value)}>{languages.map((lang) => <option value={lang.code} key={lang.code}>{lang.name} ({lang.code})</option>)}</select></label>
+        <div className="sr-editor"><div><label className="sr-language">Ngôn ngữ audio<select value={language} onChange={(e) => setLanguage(e.target.value)}>{languages.map((lang) => <option value={lang.code} key={lang.code}>{languageLabel(lang.code)}</option>)}</select></label>
         <ol className="sr-stops" aria-label="Thứ tự POI trong Route">{stops.map((poi, index) => {
           const state = coverage[poi?.id]?.languages?.find((item) => item.code === language);
           return <li className={selection === index ? "selected" : ""} key={`${index}-${route.poiIds[index]}`}><button className="sr-stop-title" onClick={() => setSelection(index)}><span className="sr-number">{index + 1}</span><span><b>{poi?.name || `POI không còn tồn tại #${route.poiIds[index]}`}</b><small>{poi?.status} · {coverage[poi?.id]?.error ? "Không tải được audio" : !state ? "Đang tải tình trạng audio…" : state.audioReady ? "Có audio" : state.textReady ? "Có văn bản · chưa có audio" : `Thiếu nội dung/audio (${state.audioStatus})`}</small></span></button>

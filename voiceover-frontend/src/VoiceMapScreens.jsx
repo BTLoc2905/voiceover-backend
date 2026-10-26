@@ -8,6 +8,7 @@ import NarrationAudioScreen from "./NarrationAudioScreen.jsx";
 import useTourLocation from "./useTourLocation.js";
 import useTourNarration from "./useTourNarration.js";
 import { distanceMeters, validPoi } from "./autoNarration.js";
+import { LANGUAGE_OPTIONS, languageLabel } from "./languageDisplay.js";
 import "./AutoNarration.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -222,12 +223,6 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
 function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, language, setLanguage, playback, player }) {
   const mapController = useRef(null);
   const [languageOpen, setLanguageOpen] = useState(false);
-  const languages = [
-    ["vi", "Tiếng Việt"], ["en", "English"], ["fr", "Français"], ["de", "Deutsch"],
-    ["es", "Español"], ["it", "Italiano"], ["ja", "日本語"], ["ko", "한국어"],
-    ["zh-CN", "简体中文"], ["zh-TW", "繁體中文"], ["th", "ไทย"], ["ru", "Русский"],
-    ["id", "Bahasa Indonesia"], ["pt", "Português"], ["ar", "العربية"], ["ms", "Bahasa Melayu"], ["hi", "हिन्दी"],
-  ];
   return (
     <main className="phone-screen nearby-screen">
       <section className="map-area">
@@ -240,11 +235,11 @@ function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, lang
           <div><small>VỊ TRÍ HIỆN TẠI</small><h1>Điểm tham quan gần bạn <span className="poi-total">({pois.length})</span></h1></div>
           <div className="language-picker">
             <button className="language-chip" onClick={() => setLanguageOpen(!languageOpen)}>
-              {language.toUpperCase()}⌄
+              {languageLabel(language)}⌄
             </button>
             {languageOpen && (
               <div className="language-menu">
-                {languages.map(([code, label]) => (
+                {LANGUAGE_OPTIONS.map(({ code, label }) => (
                   <button key={code} onClick={() => {
                     setLanguage(code);
                     setLanguageOpen(false);

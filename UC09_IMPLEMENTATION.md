@@ -2,6 +2,8 @@
 
 **Cập nhật: 24/10/2026.** Đối chiếu [PRD gốc](./Nhom2_CNPM.docx), UC09 và F-03. Tài liệu này mô tả phần triển khai trong working tree; API UC09 đã hoạt động sau khi restart backend.
 
+**Lưu ý 26/10/2026:** Các đoạn bên dưới nhắc Piper là ảnh chụp lịch sử. Cấu hình hiện hành mặc định dùng Edge-TTS tạo MP3; Google Cloud TTS Standard tạo WAV chỉ khi chọn rõ. Xem [hướng dẫn pipeline mới](./PIPELINE_VERSIONING_IMPLEMENTATION.md#edge-tts--26102026).
+
 ## Phạm vi theo PRD
 
 UC09 cho Admin chọn POI/ngôn ngữ, đọc và nghe nội dung hiện có, hiệu chỉnh và lưu bản dịch, hoặc yêu cầu tạo lại audio từ bản dịch đã lưu. Phần xử lý chạy nền, hiển thị tình trạng/lỗi, cho phép thử lại và không làm lại các ngôn ngữ khác. Dữ liệu thiếu phải được chỉ rõ.

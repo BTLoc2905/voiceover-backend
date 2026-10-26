@@ -7,8 +7,10 @@ import java.math.BigDecimal;
 
 @Entity
 @Table(name = "poi")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter @Setter @AllArgsConstructor @Builder
 public class Poi {
+    @com.fasterxml.jackson.annotation.JsonCreator
+    public Poi() {}
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "poi_id")
@@ -36,6 +38,13 @@ public class Poi {
     @Column(name = "source_language_code", length = 10, nullable = false)
     @Builder.Default
     private String sourceLanguageCode = "vi";
+
+    @Column(name = "content_revision", nullable = false)
+    private long contentRevision;
+
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    @Column(name = "source_fingerprint", length = 64)
+    private String sourceFingerprint;
 
     @Column(nullable = false, length = 10)
     @Builder.Default
