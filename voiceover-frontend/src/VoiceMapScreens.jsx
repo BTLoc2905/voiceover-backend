@@ -63,6 +63,7 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
   const latestLocation = useRef(location);
   const latestPoints = useRef([]);
   const fittedPois = useRef(false);
+  const fittedRoute = useRef(null);
   const centered = useRef(false);
   useEffect(() => { latestLocation.current = location; }, [location]);
   useEffect(() => {
@@ -87,13 +88,14 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
           const position = latestLocation.current;
           map.fitBounds(L.latLngBounds(position ? [...points, [position.lat, position.lng]] : points), { padding: [40, 40], maxZoom: 16 });
         },
+        invalidateSize: () => map.invalidateSize({ pan: false }),
       };
     }
     return () => {
       if (controllerRef) controllerRef.current = null;
       map.remove();
       mapInstance.current = null;
-      centered.current = false; fittedPois.current = false;
+      centered.current = false; fittedPois.current = false; fittedRoute.current = null;
     };
   }, [controllerRef]);
   useEffect(() => {
@@ -174,9 +176,16 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
         const layer = L.polyline(line.map(([lng, lat]) => [lat, lng]), {
           color: "#2563eb", weight: 5, opacity: 0.9,
         }).addTo(map);
-        map.fitBounds(layer.getBounds(), { padding: [32, 32], maxZoom: 17 });
+        if (fittedRoute.current !== routeGeometry) {
+          map.fitBounds(layer.getBounds(), { padding: [32, 32], maxZoom: 17 });
+          fittedRoute.current = routeGeometry;
+        }
       } else if (points.length) {
-        map.fitBounds(L.latLngBounds(points), { padding: [32, 32], maxZoom: 16 });
+        const key = points.map((point) => point.join(",")).join(";");
+        if (fittedRoute.current !== key) {
+          map.fitBounds(L.latLngBounds(points), { padding: [32, 32], maxZoom: 16 });
+          fittedRoute.current = key;
+        }
       }
     } else if (route && points.length > 1 && location) {
       const coordinates = [[location.lng, location.lat], ...points.map(([lat, lng]) => [lng, lat])];
@@ -264,9 +273,10 @@ function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, lang
   );
 }
 
-function RouteScreen({ setScreen, location, language, onLanguageChange, onStartRoute }) {
+function RouteScreen({ setScreen, location, language, onLanguageChange, onStartRoute, onPreviewAudio, returnDraft }) {
   return <RoutePlanner setScreen={setScreen} location={location} language={language} onLanguageChange={onLanguageChange}
-    MapComponent={MapArtwork} formatPoiName={localizedPoiName} onStartRoute={onStartRoute} />;
+    MapComponent={MapArtwork} formatPoiName={localizedPoiName} onStartRoute={onStartRoute}
+    onPreviewAudio={onPreviewAudio} returnDraft={returnDraft} />;
 }
 
 export default function VoiceMapScreens() {
@@ -276,6 +286,7 @@ export default function VoiceMapScreens() {
   const [loading, setLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
   const [audioBackScreen, setAudioBackScreen] = useState("map");
+  const [routeReturnDraft, setRouteReturnDraft] = useState(null);
   const [language, setLanguage] = useState(() => {
     try {
       const saved = window.localStorage.getItem("voicemap-guest-language");
@@ -317,6 +328,7 @@ export default function VoiceMapScreens() {
   const navigate = useCallback((nextScreen, poiId, backScreen = "map") => {
     // Leaving the narration screen must cancel both active media and an in-flight guide request.
     if (screen === "audio" && nextScreen !== "audio") player.stop();
+    if (screen === "route" && nextScreen === "map") setRouteReturnDraft(null);
     if (nextScreen === "audio" && poiId != null) {
       const current = player.getSnapshot();
       if (current.poiId !== poiId || current.language !== language || ["idle", "ended", "error"].includes(current.status)) {
@@ -326,6 +338,10 @@ export default function VoiceMapScreens() {
     }
     setScreen(nextScreen);
   }, [player, language, screen]);
+  const previewAudio = useCallback((id, draft) => {
+    setRouteReturnDraft(draft);
+    navigate("audio", id, "route");
+  }, [navigate]);
   const changeLanguage = (code) => {
     if (code === language) return;
     if (!Object.hasOwn(guestCatalogs, code)) return;
@@ -341,7 +357,9 @@ export default function VoiceMapScreens() {
   return <div className="demo-shell tourist-shell" lang={language}><div className="tourist-frame">
     {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError ? (language === "vi" ? catalogError : guestText(language, "requestFailed")) : gpsError ? (language === "vi" ? gpsError : guestText(language, "locationUnavailable")) : ""} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
     {screen === "audio" && <NarrationAudioScreen player={player} playback={playback} setScreen={navigate} location={location} pois={mapPois} language={language} onLanguageChange={changeLanguage} backScreen={audioBackScreen} MapComponent={MapArtwork} formatPoiName={localizedPoiName} />}
-    {screen === "route" && <RouteScreen setScreen={navigate} location={location} language={language} onLanguageChange={changeLanguage} onStartRoute={(value) => { setJourney({ ...value, index: 0 }); setScreen("journey"); }} />}
+    {screen === "route" && <RouteScreen setScreen={navigate} location={location} language={language} onLanguageChange={changeLanguage}
+      returnDraft={routeReturnDraft} onPreviewAudio={previewAudio}
+      onStartRoute={(value) => { setRouteReturnDraft(null); setJourney({ ...value, index: 0 }); setScreen("journey"); }} />}
     {screen === "journey" && journey && <RouteJourney journey={journey} initialLocation={location} gpsError={gpsError} language={language} onLanguageChange={changeLanguage} formatPoiName={localizedPoiName}
       audioBusy={["loading", "starting", "playing", "paused"].includes(playback.status)}
       onProgress={(index) => setJourney((current) => ({ ...current, index }))}

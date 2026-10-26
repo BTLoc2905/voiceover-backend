@@ -1,0 +1,249 @@
+/* A shared visual hierarchy for every Admin Portal page. */
+.admin-shell {
+  background: #e9eff7;
+}
+
+.admin-shell .admin-main {
+  background: linear-gradient(160deg, #edf3fb 0, #e8eef7 56%, #f2f5fa 100%);
+}
+
+.admin-shell .sidebar {
+  background: linear-gradient(180deg, #142b50, #1b355a);
+  border-right: 1px solid #34547d;
+  box-shadow: 5px 0 20px #17365d16;
+  z-index: 3;
+}
+
+.admin-shell .sidebar nav button.active {
+  background: #345b91;
+  border-left: 3px solid #8fbaff;
+  padding-left: 9px;
+}
+
+.admin-shell .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fbff;
+  border-bottom: 1px solid #cddbed;
+  box-shadow: 0 4px 14px #1f416412;
+  color: #526884;
+}
+
+.admin-shell .content {
+  max-width: 1400px;
+}
+
+.admin-shell .content > .page-heading:first-child {
+  padding: 24px 26px;
+  margin-bottom: 24px;
+  border: 1px solid #c5d8f2;
+  border-left: 5px solid #477ee4;
+  border-radius: 15px;
+  background: linear-gradient(110deg, #dbe9fc, #edf4ff 70%, #f7faff);
+  box-shadow: 0 8px 24px #234a8310;
+}
+
+.admin-shell .content > .page-heading:not(:first-child) {
+  margin: 30px 0 18px;
+  padding: 15px 20px;
+  border-left: 4px solid #527cb9;
+  border-radius: 10px;
+  background: #dfe9f6;
+}
+
+.admin-shell .page-heading h1,
+.admin-shell .page-heading h2 {
+  color: #193962;
+  margin-top: 0;
+}
+
+.admin-shell .muted {
+  color: #5e718d;
+}
+
+.admin-shell .panel {
+  border: 1px solid #cbd9e9;
+  border-top: 4px solid #6a95d4;
+  background: #fff;
+  box-shadow: 0 8px 26px #1d426414;
+}
+
+.admin-shell .panel h2 {
+  color: #1b426e;
+  font-size: 16px;
+}
+
+.admin-shell .panel h2::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 16px;
+  margin-right: 9px;
+  border-radius: 3px;
+  background: #4e80d8;
+  vertical-align: -3px;
+}
+
+.admin-shell .metric-grid {
+  padding: 14px;
+  border: 1px solid #d0ddeb;
+  border-radius: 16px;
+  background: #e2ebf6;
+}
+
+.admin-shell .metric-card {
+  min-width: 0;
+  border: 1px solid #d2dfed;
+  border-left: 4px solid #6b99df;
+  background: #fafdff;
+  box-shadow: 0 3px 10px #274a7110;
+}
+
+.admin-shell .metric-card:has(.metric-icon.green) { border-left-color: #35a67e; }
+.admin-shell .metric-card:has(.metric-icon.amber) { border-left-color: #d6a342; }
+.admin-shell .metric-card:has(.metric-icon.red) { border-left-color: #d87777; }
+
+.admin-shell .metric-card small,
+.admin-shell .poi-form label,
+.admin-shell .tr-editor-label {
+  color: #435d7e;
+}
+
+.admin-shell .log-list .log-row,
+.admin-shell .poi-row {
+  padding-left: 10px;
+  padding-right: 10px;
+  border-radius: 7px;
+}
+
+.admin-shell .log-list .log-row:nth-child(even),
+.admin-shell .poi-row:nth-child(even) {
+  background: #f2f6fc;
+}
+
+.admin-shell .poi-row .row-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-shell .poi-row .row-actions button {
+  min-width: 58px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+
+.admin-shell .poi-row .poi-edit-button {
+  border-color: #aac6f5;
+  background: #e7f0ff;
+  color: #2459ae;
+}
+
+.admin-shell .poi-row .poi-edit-button:hover {
+  border-color: #6e9de8;
+  background: #d4e5ff;
+}
+
+.admin-shell .poi-row .poi-delete-button {
+  border-color: #efb6b8;
+  background: #fff0f0;
+  color: #a3333c;
+}
+
+.admin-shell .poi-row .poi-delete-button:hover {
+  border-color: #db858b;
+  background: #ffe0e1;
+}
+
+.admin-shell .monitoring-panel:first-of-type {
+  background: #f7fbff;
+}
+
+.admin-shell .monitoring-panel:has(.log-list) {
+  border-top-color: #d69a83;
+  background: #fffaf8;
+}
+
+.admin-shell .admin-columns > .panel:nth-child(2),
+.admin-shell .session-routes .sr-sessions,
+.admin-shell .translation-review .tr-languages {
+  background: #f2f7fd;
+}
+
+.admin-shell .session-routes .sr-workspace > .panel:nth-child(even) {
+  border-top-color: #53a99a;
+}
+
+.admin-shell .session-routes .sr-create-session {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid #285fbe;
+  border-radius: 9px;
+  background: #316ed5;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px #2e65bc28;
+}
+
+.admin-shell .session-routes .sr-create-session:hover:not(:disabled) {
+  background: #225ab8;
+}
+
+.admin-shell .translation-review .tr-poi-picker {
+  max-width: none;
+  padding: 16px 20px;
+  border: 1px solid #cbd9e9;
+  border-radius: 12px;
+  background: #e2ebf6;
+}
+
+.admin-shell .translation-review .tr-poi-picker select {
+  max-width: 620px;
+  border-color: #aebfd4;
+}
+
+.admin-shell .translation-review .tr-audio {
+  border-top-color: #53a99a;
+  background: #f5fbf9;
+}
+
+.admin-shell .tr-task,
+.admin-shell .tr-source p {
+  border: 1px solid #d7e4f2;
+  background: #f1f6fd;
+}
+
+.admin-shell .poi-form input,
+.admin-shell .poi-form select,
+.admin-shell .poi-form textarea,
+.admin-shell .translation-review textarea {
+  border-color: #b7c9de;
+  background: #fff;
+}
+
+.admin-shell button:focus-visible,
+.admin-shell input:focus-visible,
+.admin-shell select:focus-visible,
+.admin-shell textarea:focus-visible {
+  outline: 3px solid #82aff6;
+  outline-offset: 2px;
+}
+
+@media (max-width: 620px) {
+  .admin-shell .content > .page-heading:first-child { padding: 18px; }
+  .admin-shell .metric-grid { padding: 10px; }
+  .admin-shell .topbar { position: static; }
+}

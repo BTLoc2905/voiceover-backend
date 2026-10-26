@@ -4,12 +4,14 @@ import "leaflet/dist/leaflet.css";
 import "./SessionRoutes.css";
 import { guestText } from "./guestUi.js";
 
-export default function OrderedRouteMap({ pois, geometry, activeGeometry, selectedIndex, onSelect, location, language = "vi", formatPoiName = (name) => name }) {
+export default function OrderedRouteMap({ pois, geometry, activeGeometry, selectedIndex, onSelect, onListen, location, language = "vi", formatPoiName = (name) => name }) {
   const container = useRef(null);
   const map = useRef(null);
   const select = useRef(onSelect);
+  const listen = useRef(onListen);
   const locationLayer = useRef(null);
   useEffect(() => { select.current = onSelect; }, [onSelect]);
+  useEffect(() => { listen.current = onListen; }, [onListen]);
   useEffect(() => {
     const instance = L.map(container.current).setView([10.7769, 106.7009], 13);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -25,12 +27,24 @@ export default function OrderedRouteMap({ pois, geometry, activeGeometry, select
     const group = L.featureGroup().addTo(instance);
     pois.forEach((poi, index) => {
       if (poi?.latitude == null || poi?.longitude == null || !Number.isFinite(Number(poi.latitude)) || !Number.isFinite(Number(poi.longitude)) || Math.abs(Number(poi.latitude)) > 90 || Math.abs(Number(poi.longitude)) > 180) return;
-      const label = document.createElement("span"); label.textContent = `${index + 1}. ${formatPoiName(poi.name, language)}`;
+      const name = formatPoiName(poi.name, language);
+      const label = document.createElement("span"); label.textContent = `${index + 1}. ${name}`;
       const marker = L.marker([Number(poi.latitude), Number(poi.longitude)], {
-        title: `${index + 1}. ${formatPoiName(poi.name, language)}`, keyboard: true,
+        title: `${index + 1}. ${name}`, keyboard: true,
         icon: L.divIcon({ className: `ordered-marker${selectedIndex === index ? " selected" : ""}`,
           html: `<span>${index + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }),
       }).bindTooltip(label).addTo(group);
+      if (listen.current) {
+        const popup = document.createElement("div");
+        popup.textContent = name;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "map-listen-button";
+        button.textContent = guestText(language, "listenToNarration");
+        button.addEventListener("click", () => listen.current?.(poi.id));
+        popup.append(document.createElement("br"), button);
+        marker.bindPopup(popup);
+      }
       marker.on("click", () => select.current?.(index));
       if (selectedIndex === index) marker.openTooltip();
     });

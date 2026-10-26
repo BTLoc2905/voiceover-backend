@@ -148,7 +148,7 @@ export default function SessionRoutes() {
     {error && <div className="alert error" role="alert">{error}</div>}{message && <div className="alert" role="status">{message}</div>}
     {loading ? <p role="status">Đang tải Session và Routes…</p> : <>
       <div className="sr-layout"><aside className="panel sr-sessions"><h2>Sessions</h2>
-        <button className="secondary" disabled={busy} onClick={() => { if (abandon()) { setSession(emptySession()); setRoute(emptyRoute()); setDirty(false); remember(); } }}>＋ Tạo Session</button>
+        <button type="button" className="sr-create-session" disabled={busy} onClick={() => { if (abandon()) { setSession(emptySession()); setRoute(emptyRoute()); setDirty(false); remember(); } }}>Tạo Session</button>
         <ul>{sessions.map((row) => <li key={row.id}><button className={session.id === row.id ? "chosen" : ""} disabled={busy} onClick={() => {
           if (abandon()) { setSession(row); setRoute(row.routes[0] || emptyRoute()); setDirty(false); setSelection(0); remember(row.id, row.routes[0]?.id); }
         }}><b>{row.name || "Session chưa đặt tên"}</b><small>#{row.id} · {row.status === "PUBLISHED" ? "Đã xuất bản" : "Nháp"} · {row.routes.length} Route</small></button></li>)}</ul>
