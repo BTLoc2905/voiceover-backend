@@ -5,6 +5,7 @@ import {
 } from "./routePlan.js";
 import LanguagePicker from "./LanguagePicker.jsx";
 import { guestText } from "./guestUi.js";
+import { recordRouteSelection } from "./narrationApi.js";
 import "./RoutePlanner.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -182,7 +183,9 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
       const result = await routeApi(`/routes/${draft.sourceRouteId}/start`, {
         method: "POST", body: JSON.stringify({ poiIds: draft.pois.map((poi) => poi.id) }),
       });
-      onStartRoute(checkPreview(result, draft.pois));
+      const verified = checkPreview(result, draft.pois);
+      onStartRoute(verified);
+      void recordRouteSelection(draft.sourceRouteId).catch(() => {});
     } catch (reason) { setSaveError(reason.message); }
     finally { setSaving(false); }
   };

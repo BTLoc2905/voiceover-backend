@@ -29,6 +29,16 @@ export function recordAppOpen() {
   return appOpenRequest;
 }
 
+export function recordActiveVisit() {
+  const playbackId = globalThis.crypto?.randomUUID?.() || `active-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return recordPlaybackEvent({ eventType: "APP_ACTIVE", poiId: null, languageCode: null, playbackId }, anonymousClientId());
+}
+
+export function recordRouteSelection(routeId) {
+  const playbackId = globalThis.crypto?.randomUUID?.() || `route-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return recordPlaybackEvent({ eventType: "ROUTE_SELECTED", routeId, poiId: null, languageCode: null, playbackId }, anonymousClientId());
+}
+
 export async function getGuide(poiId, language, signal) {
   const response = await fetch(`${API_BASE}/api/public/pois/${poiId}/guide?${new URLSearchParams({ lang: language, triggerType: "PRELOAD" })}`, { signal, cache: "no-store" });
   const guide = await response.json().catch(() => ({}));

@@ -11,7 +11,7 @@ import "./guestUi.css";
 import useTourLocation from "./useTourLocation.js";
 import useTourNarration from "./useTourNarration.js";
 import { distanceMeters, validPoi } from "./autoNarration.js";
-import { recordAppOpen } from "./narrationApi.js";
+import { recordActiveVisit, recordAppOpen } from "./narrationApi.js";
 import "./AutoNarration.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -284,7 +284,14 @@ export default function VoiceMapScreens() {
   });
   const { position: location, gpsError } = useTourLocation();
   const { player, playback } = useTourNarration(location, catalog, language);
-  useEffect(() => { void recordAppOpen().catch(() => {}); }, []);
+  useEffect(() => {
+    void recordAppOpen().catch(() => {});
+    const ping = () => { if (!document.hidden) void recordActiveVisit().catch(() => {}); };
+    ping();
+    const timer = window.setInterval(ping, 60000);
+    document.addEventListener("visibilitychange", ping);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", ping); };
+  }, []);
   useEffect(() => {
     let active = true;
     let request;

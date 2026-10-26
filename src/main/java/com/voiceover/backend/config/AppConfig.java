@@ -8,6 +8,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 
 import java.nio.file.Paths;
 import java.util.concurrent.Executor;
@@ -18,6 +19,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @EnableAsync
 @org.springframework.scheduling.annotation.EnableScheduling
 public class AppConfig implements WebMvcConfigurer {
+    private final AdminSessionInterceptor adminSessionInterceptor;
+
+    public AppConfig(AdminSessionInterceptor adminSessionInterceptor) {
+        this.adminSessionInterceptor = adminSessionInterceptor;
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(adminSessionInterceptor).addPathPatterns("/api/admin/**");
+    }
     @Value("${app.audio.storage:storage/audio}")
     private String audioStorage;
 

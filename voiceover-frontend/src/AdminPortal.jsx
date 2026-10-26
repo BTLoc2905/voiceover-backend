@@ -27,6 +27,7 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   const body = await response.json().catch(() => ({}));
+  if (response.status === 401) window.dispatchEvent(new Event("voicemap-admin-session-expired"));
   if (!response.ok) throw new Error(body.message || "Không thể kết nối backend.");
   return body;
 }
@@ -130,15 +131,37 @@ function Login({ onLogin }) {
 function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const load = () => api("/api/admin/monitoring/dashboard").then(setData).catch((reason) => setError(reason.message));
+  const load = () => api("/api/admin/monitoring/dashboard").then((value) => { setData(value); setError(""); }).catch((reason) => setError(reason.message));
   useEffect(() => { load(); const timer = window.setInterval(load, 10000); return () => window.clearInterval(timer); }, []);
+  const status = (value) => <span className={`health ${value === "NORMAL" ? "green" : value === "WARNING" ? "yellow" : value === "ERROR" ? "red" : "unknown"}`}>
+    {value === "NORMAL" ? "Bình thường" : value === "WARNING" ? "Cảnh báo" : value === "ERROR" ? "Lỗi" : "Chưa có dữ liệu"}</span>;
+  const metric = (label, value, tone = "blue") => <div className="metric-card" key={label}><span className={`metric-icon ${tone}`}>◈</span><div><small>{label}</small><strong>{value ?? "—"}</strong></div></div>;
   return <section className="content">
-    <div className="page-heading"><div><p className="eyebrow">THỐNG KÊ SỬ DỤNG</p><h1>Dashboard</h1><p className="muted">Dữ liệu tự làm mới mỗi 10 giây. Mỗi trình duyệt khách được tính một lần; lượt nghe tăng khi audio bắt đầu phát.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">GIÁM SÁT & THỐNG KÊ</p><h1>Dashboard</h1><p className="muted">Dữ liệu thật, tải lại mỗi 10 giây. Thống kê sử dụng trong 24 giờ; người dùng hoạt động trong 2 phút gần nhất.</p></div>
+      <button type="button" className="secondary" onClick={load}>Làm mới</button></div>
     {error && <div className="alert error">{error}</div>}
+    {data?.dataUnavailable && <div className="alert error">Cơ sở dữ liệu tạm thời không khả dụng; số liệu sử dụng chưa được tải.</div>}
+    <article className="panel monitoring-panel"><h2>Tình trạng hệ thống</h2><div className="monitoring-health">
+      <div>Ứng dụng {status(data?.applicationStatus)}</div><div>Cơ sở dữ liệu {status(data?.databaseStatus)}</div><div>Pipeline {status(data?.pipelineStatus)}</div>
+    </div><p className="muted">Tỷ lệ lỗi chỉ tính phản hồi API 5xx; thời gian phản hồi là trung bình trong 5 phút gần nhất trên tiến trình backend hiện tại.</p></article>
     <div className="metric-grid">
-      {[["Số POI tham quan", data?.poiCount, "blue"], ["Số POI đang hoạt động", data?.activePoiCount, "amber"], ["Số người đã sử dụng", data?.userCount, "green"]].map(([label, value, tone]) => <div className="metric-card" key={label}><span className={`metric-icon ${tone}`}>◈</span><div><small>{label}</small><strong>{value ?? "—"}</strong></div></div>)}
+      {metric("Tác vụ đang chờ", data?.pipelinePending)}{metric("Tác vụ đang xử lý", data?.pipelineProcessing)}
+      {metric("Tác vụ lỗi", data?.pipelineFailed, "red")}{metric("Tỷ lệ lỗi API", data?.errorRatePercent == null ? null : `${data.errorRatePercent}%`, "amber")}
+      {metric("Phản hồi API trung bình", data?.averageLatencyMs == null ? null : `${data.averageLatencyMs} ms`)}
     </div>
-    <article className="panel"><h2>Lượt nghe tại từng địa điểm</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt nghe</b></div>)}{!data?.poiUsage?.length && <p className="muted">Chưa có POI.</p>}</div></article>
+    <article className="panel monitoring-panel"><h2>Lỗi gần đây</h2><div className="log-list">
+      {(data?.recentErrors || []).map((item) => <div className="log-row" key={item.id}><span className="dot error" /><span><b>{item.component}</b> · {item.message}</span><small>{new Date(item.occurredAt).toLocaleString("vi-VN")}</small></div>)}
+      {!data?.recentErrors?.length && <p className="muted">{data ? "Không ghi nhận lỗi trong 24 giờ gần đây." : "Đang tải dữ liệu."}</p>}
+    </div></article>
+    <div className="page-heading"><div><h2>Mức sử dụng</h2><p className="muted">Các lượt nghe được ghi khi audio bắt đầu phát, không tính thao tác tải trước.</p></div></div>
+    <div className="metric-grid">
+      {metric("Người dùng đang hoạt động", data?.activeUsers, "green")}{metric("Lượt nghe tự động", data?.autoListens)}
+      {metric("Lượt nghe do chạm POI", data?.tapListens)}{metric("Tỷ lệ nghe tự động", data?.autoRatioPercent == null ? null : `${data.autoRatioPercent}%`)}
+      {metric("Số POI tham quan", data?.poiCount)}{metric("Số POI đang hoạt động", data?.activePoiCount, "green")}
+    </div>
+    <div className="dashboard-grid"><article className="panel"><h2>Lượt nghe theo POI · 24 giờ</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.poiUsage?.length && <p className="muted">Chưa có dữ liệu.</p>}</div></article>
+      <article className="panel"><h2>Lượt nghe theo ngôn ngữ · 24 giờ</h2><div className="log-list">{(data?.languageUsage || []).map((item) => <div className="log-row" key={item.languageCode}><span className="dot green" /><span>{languageLabel(item.languageCode)}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.languageUsage?.length && <p className="muted">Chưa có lượt nghe.</p>}</div></article></div>
+    <article className="panel"><h2>Lộ trình được chọn nhiều nhất · 24 giờ</h2><div className="log-list">{(data?.popularRoutes || []).map((item) => <div className="log-row" key={item.routeId}><span className="dot green" /><span>{item.routeName}</span><b className="listen-count">{item.selections} lượt chọn</b></div>)}{!data?.popularRoutes?.length && <p className="muted">Chưa có lượt chọn lộ trình.</p>}</div></article>
   </section>;
 }
 
@@ -316,10 +339,19 @@ function PoiManagement() {
 }
 
 export default function AdminPortal() {
-  const [account, setAccount] = useState(() => JSON.parse(localStorage.getItem("voicemap-admin") || "null"));
+  const [account, setAccount] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const resolvePage = () => window.location.pathname === "/poimanagement" ? "pois" : window.location.pathname.startsWith("/admin/sessions") ? "sessions" : window.location.pathname.startsWith("/admin/translations") ? "translations" : "dashboard";
   const [page, setPage] = useState(resolvePage);
   const [reviewDirty, setReviewDirty] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const expired = () => setAccount(null);
+    window.addEventListener("voicemap-admin-session-expired", expired);
+    api("/api/admin/auth/me").then((value) => { if (active) setAccount(value); }).catch(() => {})
+      .finally(() => { if (active) setAuthLoading(false); });
+    return () => { active = false; window.removeEventListener("voicemap-admin-session-expired", expired); };
+  }, []);
   useEffect(() => {
     const handleBack = () => {
       const next = resolvePage();
@@ -336,6 +368,7 @@ export default function AdminPortal() {
     window.history.pushState({}, "", path);
     setPage(nextPage);
   };
-  if (!account) return <Login onLogin={(value) => { localStorage.setItem("voicemap-admin", JSON.stringify(value)); setAccount(value); }} />;
-  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "sessions" ? "active" : ""} onClick={() => navigateAdmin("/admin/sessions", "sessions")}>◎ <span>Sessions & Routes</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if (reviewDirty && !window.confirm("Bản dịch có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; localStorage.removeItem("voicemap-admin"); setAccount(null); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "sessions" ? "Sessions & Routes" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span className="live-status">● System operational</span></header>{page === "dashboard" ? <Dashboard /> : page === "sessions" ? <SessionRoutes /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
+  if (authLoading) return <main className="admin-login"><p role="status">Đang kiểm tra phiên quản trị…</p></main>;
+  if (!account) return <Login onLogin={setAccount} />;
+  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "sessions" ? "active" : ""} onClick={() => navigateAdmin("/admin/sessions", "sessions")}>◎ <span>Sessions & Routes</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if (reviewDirty && !window.confirm("Bản dịch có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; void api("/api/admin/auth/logout", { method: "POST" }).then(() => setAccount(null)).catch((reason) => window.alert(reason.message)); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "sessions" ? "Sessions & Routes" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span>VoiceMap Admin</span></header>{page === "dashboard" ? <Dashboard /> : page === "sessions" ? <SessionRoutes /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
 }
