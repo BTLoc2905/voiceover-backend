@@ -1,0 +1,5 @@
+.env
+
+target/
+.venv-edge-tts/
+storage/audio/
