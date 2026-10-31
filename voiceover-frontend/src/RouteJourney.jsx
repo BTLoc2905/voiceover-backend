@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import OrderedRouteMap from "./OrderedRouteMap.jsx";
+import LanguagePicker from "./LanguagePicker.jsx";
+import { guestText } from "./guestUi.js";
 import { walkingDistance } from "./routePlan.js";
+import "./RouteJourney.css";
 import {
   distanceBetweenCoordinates, JourneyArrivalTracker, nextStopRequiresManualConfirmation,
   OffRouteTracker, reliableJourneyFix,
@@ -8,12 +11,17 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-export default function RouteJourney({ journey, onProgress, onAudio, onExit, initialLocation, gpsError = "", audioBusy = false }) {
+export default function RouteJourney({ journey, onProgress, onAudio, onExit, initialLocation, gpsError = "", audioBusy = false, language = "vi", onLanguageChange, formatPoiName = (name) => name }) {
+  const t = (key) => guestText(language, key);
   const position = initialLocation;
   const [leg, setLeg] = useState(null);
   const [request, setRequest] = useState({ origin: null, sequence: 0 });
   const [offRoute, setOffRoute] = useState(false);
   const [clock, setClock] = useState(0);
+  const [mapHeight, setMapHeight] = useState(28);
+  const mapController = useRef(null);
+  const dragHandle = useRef(null);
+  const ignoreHandleClick = useRef(false);
   const index = Math.max(0, journey.index || 0);
   const target = journey.pois[index];
   const done = index >= journey.pois.length;
@@ -141,23 +149,84 @@ export default function RouteJourney({ journey, onProgress, onAudio, onExit, ini
     lastProgressIndex.current = index;
     onProgress(index + 1);
   };
-  return <main className="phone-screen route-journey">
-    <div className="journey-map"><OrderedRouteMap pois={journey.pois} selectedIndex={index} location={position} geometry={!done && currentLeg?.data ? currentLeg.data.geometry : undefined} /></div>
-    <section className="journey-content"><small>UC04 · DẪN ĐƯỜNG ĐI BỘ</small><h1>{done ? "Đã kết thúc lộ trình" : `Điểm ${index + 1}/${journey.pois.length}: ${target.name}`}</h1>
-      <p>{journey.name} · {journey.stopCount} điểm · {walkingDistance(journey.totalDistanceMeters)} · {journey.estimatedDurationMinutes} phút giữa các điểm</p>
-      {!done && <>
-        {manualArrivalRequired ? <p className="journey-notice" role="status">Điểm này ở gần điểm vừa tham quan. Hãy xác nhận thủ công để tránh tự hoàn thành nhầm hai điểm.</p>
-          : arrived ? <p className="alert" role="status">Bạn đã đến gần điểm đích bằng GPS chính xác. Đang chuyển sang điểm tiếp theo…</p>
-            : offRoute ? <p className="journey-notice" role="status">Đang tính lại đường đi bộ từ vị trí mới của bạn…</p>
-          : currentLeg?.data ? <p role="status">Từ vị trí của bạn: {walkingDistance(currentLeg.data.totalDistanceMeters)} · khoảng {currentLeg.data.estimatedDurationMinutes} phút đi bộ.</p>
-            : <p className="journey-notice" role="status">{currentLeg?.error || gpsError || (!position ? "Đang chờ vị trí GPS. Có thể xem thứ tự điểm và mở thuyết minh thủ công." : !reliableFix ? "GPS cần độ chính xác tối đa 30 m và vị trí mới trong 5 giây để xác nhận đến điểm." : "Đang tính đường đi bộ tới điểm tiếp theo…")}{currentLeg?.error && <button onClick={() => {
-              requestRoute(reliableJourneyFix(positionRef.current, Date.now()) ? positionRef.current : currentLeg.origin);
-            }}>Thử lại</button>}</p>}
-        <button className="primary-button" onClick={() => onAudio(target.id)}>Nghe thuyết minh điểm này</button>
-        <div className="journey-actions"><button onClick={manualProgress}>{index === journey.pois.length - 1 ? "Xác nhận hoàn thành lộ trình" : "Đã đến · điểm tiếp theo"}</button><button onClick={manualProgress}>Bỏ qua điểm này</button></div>
-      </>}
-      <ol aria-label="Tiến độ tham quan">{journey.pois.map((poi, i) => <li className={i === index ? "current" : ""} key={poi.id}>{poi.name} {i < index ? "✓ Đã đi qua" : i === index ? "← Điểm đến hiện tại" : ""}</li>)}</ol>
-      <button className="route-secondary-button" onClick={onExit}>{done ? "Chọn lộ trình khác" : "Dừng dẫn đường · quay lại danh sách"}</button>
+  const statusText = manualArrivalRequired ? t("closeStopsNotice")
+    : arrived ? t("gpsArrived")
+      : offRoute ? t("rerouting")
+        : currentLeg?.error ? (language === "vi" ? currentLeg.error : t("nextLegFailed"))
+          : gpsError ? (language === "vi" ? gpsError : t("locationUnavailable"))
+            : !position ? t("waitingGpsManual")
+              : !reliableFix ? t("gpsAccuracyNeeded") : t("calculatingNext");
+  const maxMapHeight = (screenHeight) => Math.max(28, Math.min(92, (screenHeight - 34) * 100 / screenHeight));
+  const dragHandleDown = (event) => {
+    ignoreHandleClick.current = false;
+    dragHandle.current = { id: event.pointerId, y: event.clientY, height: mapHeight, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const dragHandleMove = (event) => {
+    const start = dragHandle.current;
+    if (!start || start.id !== event.pointerId) return;
+    const distance = event.clientY - start.y;
+    if (Math.abs(distance) > 5) start.moved = true;
+    if (!start.moved) return;
+    const screenHeight = event.currentTarget.closest(".phone-screen")?.clientHeight || 600;
+    setMapHeight(Math.max(28, Math.min(maxMapHeight(screenHeight), start.height + distance * 100 / screenHeight)));
+  };
+  const dragHandleEnd = (event) => {
+    if (dragHandle.current?.id !== event.pointerId) return;
+    ignoreHandleClick.current = dragHandle.current.moved;
+    dragHandle.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  return <main className="phone-screen route-journey" style={{ "--journey-map-height": `${mapHeight}%` }}>
+    <div className="journey-map" id="journey-route-map"><OrderedRouteMap pois={journey.pois} selectedIndex={index} location={position} controllerRef={mapController} onListen={onAudio}
+      geometry={journey.geometry} activeGeometry={!done ? currentLeg?.data?.geometry : undefined}
+      language={language} formatPoiName={formatPoiName} />
+      <button type="button" className="journey-back-button" onClick={onExit}
+        aria-label={t("stopNavigation")} title={t("stopNavigation")}>‹</button>
+      <button type="button" className="journey-locate-button" aria-label={t("showMyLocation")} title={t("showMyLocation")}
+        disabled={!position} onClick={() => mapController.current?.locate(position)}>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" /><path d="M12 2v3m0 14v3M2 12h3m14 0h3" /><circle cx="12" cy="12" r="2" /></svg>
+      </button>
+    </div>
+    <section className="journey-content">
+      <button type="button" className="journey-sheet-drag" aria-label={t("routePreviewMap")}
+        aria-controls="journey-route-map" aria-pressed={mapHeight >= 45}
+        onPointerDown={dragHandleDown} onPointerMove={dragHandleMove}
+        onPointerUp={dragHandleEnd} onPointerCancel={dragHandleEnd}
+        onClick={(event) => {
+          if (ignoreHandleClick.current) { ignoreHandleClick.current = false; return; }
+          const screenHeight = event.currentTarget.closest(".phone-screen")?.clientHeight || 600;
+          setMapHeight((height) => height >= 45 ? 28 : maxMapHeight(screenHeight));
+        }}>
+        <span className="sheet-handle" />
+      </button>
+      <div className="journey-scroll">
+        <div className="journey-language-choice"><strong>NGÔN NGỮ DỊCH :</strong><LanguagePicker language={language} onChange={onLanguageChange} /></div>
+        <div className="journey-info-box">
+          <section className="journey-stops" aria-label={t("tourProgress")}>
+            <h2>{t("tourProgress")}</h2>
+            <ol>{journey.pois.map((poi, i) => <li className={i === index ? "current" : i < index ? "visited" : ""} key={poi.id}>
+              <span className="journey-stop-number">{i + 1}.</span>
+              <span>{formatPoiName(poi.name, language)}{i < index ? ` — ${t("visited")}` : i === index ? ` — ${t("currentDestination")}` : ""}</span>
+            </li>)}</ol>
+          </section>
+        </div>
+      </div>
+      <div className="journey-footer">
+        {!done && <div className="journey-status" role="status">
+          <strong>{currentLeg?.data && !manualArrivalRequired && !arrived && !offRoute ? t("fromYourLocation") : statusText}</strong>
+          {currentLeg?.data && !manualArrivalRequired && !arrived && !offRoute && <p>{walkingDistance(currentLeg.data.totalDistanceMeters)} · {currentLeg.data.estimatedDurationMinutes} {t("walkingMinutes")}</p>}
+          {currentLeg?.error && <button type="button" onClick={() => {
+            requestRoute(reliableJourneyFix(positionRef.current, Date.now()) ? positionRef.current : currentLeg.origin);
+          }}>{t("retry")}</button>}
+        </div>}
+        {!done && <>
+          {arrived && <button type="button" className="journey-listen-button" onClick={() => onAudio(target.id)}>{t("listenThisStop")}</button>}
+          <button type="button" className="journey-confirm-button" onClick={manualProgress}>{index === journey.pois.length - 1 ? t("confirmCompletion") : t("arrivedNext")}</button>
+          <div className="journey-footer-links"><button type="button" onClick={manualProgress}>{t("skipStop")}</button></div>
+        </>}
+        {done && <button type="button" className="journey-confirm-button" onClick={onExit}>{t("chooseAnotherRoute")}</button>}
+      </div>
     </section>
   </main>;
 }

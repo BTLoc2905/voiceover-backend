@@ -1,144 +1,205 @@
 package com.voiceover.backend.services;
 
 import com.voiceover.backend.entities.*;
-import com.voiceover.backend.repositories.*;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.ApplicationEventPublisher;
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class TranslationReviewServiceTest {
-    final PoiRepository pois = mock(PoiRepository.class);
-    final LanguageRepository languages = mock(LanguageRepository.class);
-    final TranslationRepository texts = mock(TranslationRepository.class);
-    final AudioRepository audios = mock(AudioRepository.class);
-    final PipelineTaskRepository tasks = mock(PipelineTaskRepository.class);
-    final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-    final AudioGenerationService generator = mock(AudioGenerationService.class);
-    final TranslationReviewService service = new TranslationReviewService(pois, languages, texts, audios, tasks, events, generator);
-    final List<PipelineTask> jobs = new ArrayList<>();
-    final Translation vi = Translation.builder().id(20L).poiId(1L).languageCode("vi").content("Bản cũ").status("COMPLETED").build();
-    final Translation en = Translation.builder().id(21L).poiId(1L).languageCode("en").content("English unchanged").status("COMPLETED").build();
-    final Audio audio = Audio.builder().id(30L).translationId(20L).poiId(1L).languageCode("vi").status("COMPLETED").filePath("/audio/old.mp3").build();
-    @BeforeEach void setup() {
-        Poi poi = Poi.builder().id(1L).name("POI").descriptionSource("Nguồn").sourceLanguageCode("vi").status("PUBLISHED").latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).build();
-        when(pois.findById(1L)).thenReturn(Optional.of(poi)); when(pois.findForUpdate(1L)).thenReturn(Optional.of(poi));
-        Language lang = Language.builder().code("vi").name("Tiếng Việt").isActive(true).ttsSupported(true).build();
-        when(languages.findById("vi")).thenReturn(Optional.of(lang)); when(languages.findAll()).thenReturn(List.of(lang));
-        when(generator.provider(anyString())).thenReturn("UNAVAILABLE");
-        when(texts.findByPoiIdAndLanguageCode(1L, "vi")).thenReturn(Optional.of(vi));
-        when(texts.findByPoiId(1L)).thenReturn(List.of(vi, en)); when(audios.findByPoiId(1L)).thenReturn(List.of(audio));
-        when(audios.findByPoiIdAndLanguageCode(1L, "vi")).thenReturn(Optional.of(audio));
-        when(texts.saveAndFlush(any())).thenAnswer(a -> a.getArgument(0)); when(audios.saveAndFlush(any())).thenAnswer(a -> a.getArgument(0));
-        AtomicLong ids = new AtomicLong(100);
-        when(tasks.saveAndFlush(any())).thenAnswer(a -> { PipelineTask job = a.getArgument(0); if (job.getId() == null) { job.setId(ids.incrementAndGet()); jobs.add(job); } return job; });
-        when(tasks.findByPoiId(1L)).thenAnswer(a -> new ArrayList<>(jobs));
-        when(tasks.findById(anyLong())).thenAnswer(a -> jobs.stream().filter(t -> t.getId().equals(a.getArgument(0))).findFirst());
-        when(tasks.findPoiIdById(anyLong())).thenAnswer(a -> jobs.stream().filter(t -> t.getId().equals(a.getArgument(0))).map(PipelineTask::getPoiId).findFirst());
-        when(tasks.findFirstByPoiIdAndTargetLanguageCodeOrderByIdDesc(1L,"vi")).thenAnswer(a -> jobs.stream().filter(t -> "vi".equals(t.getTargetLanguageCode())).max(Comparator.comparing(PipelineTask::getId)));
-        when(tasks.existsByPoiIdAndTargetLanguageCodeAndStatusIn(eq(1L),eq("vi"),anyCollection())).thenAnswer(a -> jobs.stream().anyMatch(t -> "vi".equals(t.getTargetLanguageCode()) && List.of("PENDING","PROCESSING").contains(t.getStatus())));
-    }
-    String revision() { return TranslationReviewService.revision(vi); }
+    final ContentPipelineFixture f = new ContentPipelineFixture();
 
-    @Test void savesOnlySelectedLanguageAndQueuesAfterPersistenceWithoutPretendingAudioExists() throws Exception {
-        var result = service.submit(1L,"vi","Bản đã sửa đầy đủ",revision(),false);
-        assertEquals("Bản đã sửa đầy đủ",vi.getContent()); assertTrue(vi.isManualEdit());
-        assertEquals("English unchanged",en.getContent());
-        assertEquals("PENDING",result.review().task().status()); assertEquals("TTS_ONLY",result.review().task().type());
-        assertEquals("PENDING",audio.getStatus()); assertNull(audio.getFilePath());
-        verify(texts).saveAndFlush(vi); verify(texts,never()).saveAndFlush(en);
-        verify(events).publishEvent(new ReviewAudioRequested(jobs.getFirst().getId()));
-        verify(generator,never()).generate(any(),any(),any());
-    }
-    @Test void readDoesNotSaveGenerateOrEnqueue() {
-        var result = service.index(1L); assertEquals(1,result.languages().size());
-        verify(texts,never()).saveAndFlush(any()); verify(audios,never()).saveAndFlush(any()); verify(tasks,never()).saveAndFlush(any()); verifyNoInteractions(events);
-    }
-    @Test void rejectsBusyOrStaleWriteAndKeepsStoredText() {
-        jobs.add(PipelineTask.builder().id(5L).poiId(1L).targetLanguageCode("vi").taskType("TRANSLATE_TTS").status("PROCESSING").build());
-        assertThrows(ContentReviewConflictException.class,()->service.submit(1L,"vi","New",revision(),false));
-        jobs.clear(); assertThrows(ContentReviewConflictException.class,()->service.submit(1L,"vi","New","old-revision",false));
-        assertEquals("Bản cũ",vi.getContent()); verify(texts,never()).saveAndFlush(any()); verifyNoInteractions(events);
-    }
-    @Test void blankOversizeMissingAndInactiveInputsDoNotQueue() {
-        assertThrows(IllegalArgumentException.class,()->service.submit(1L,"vi","  ",revision(),false));
-        assertThrows(IllegalArgumentException.class,()->service.submit(1L,"vi","ạ".repeat(21000),revision(),false));
-        when(texts.findByPoiIdAndLanguageCode(1L,"vi")).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class,()->service.submit(1L,"vi","New",revision(),false));
-        when(languages.findById("vi")).thenReturn(Optional.of(Language.builder().code("vi").isActive(false).build()));
-        assertThrows(IllegalArgumentException.class,()->service.submit(1L,"vi","New",revision(),false)); verifyNoInteractions(events);
-    }
-    @Test void regenerationUsesStoredTextAndTransitionsToARealVersionedFile() {
-        service.submit(1L,"vi",null,revision(),true); verify(texts,never()).saveAndFlush(any());
-        var work = service.begin(jobs.getFirst().getId()); assertEquals("Bản cũ",work.text()); assertEquals("PROCESSING",audio.getStatus());
-        service.complete(work,new AudioGenerationService.GeneratedAudio("/storage/audio/new-uuid.wav",32),1);
-        assertEquals("COMPLETED",audio.getStatus()); assertEquals("/storage/audio/new-uuid.wav",audio.getFilePath());
-        assertEquals(32,audio.getDurationSec()); assertEquals("COMPLETED",jobs.getFirst().getStatus()); assertEquals(1,jobs.getFirst().getRetryCount());
-    }
-    @Test void failedAudioPreservesSavedTranslationAndAllowsRetry() {
-        service.submit(1L,"vi","Bản đã lưu",revision(),false); long id=jobs.getFirst().getId();
-        service.begin(id); service.fail(id,"TTS unavailable",3);
-        assertEquals("Bản đã lưu",vi.getContent()); assertEquals("COMPLETED",vi.getStatus()); assertEquals("FAILED",audio.getStatus()); assertNull(audio.getFilePath());
-        service.submit(1L,"vi",null,revision(),true); assertEquals(2,jobs.size()); assertEquals("PENDING",jobs.getLast().getStatus());
-    }
-    @Test void staleWorkerCannotPublishAudioForDifferentText() {
-        service.submit(1L,"vi",null,revision(),true); var work=service.begin(jobs.getFirst().getId());
-        vi.setContent("Changed elsewhere"); service.complete(work,new AudioGenerationService.GeneratedAudio("/stale.wav",10),0);
-        assertEquals("FAILED",jobs.getFirst().getStatus()); assertEquals("FAILED",audio.getStatus()); assertNull(audio.getFilePath());
-    }
-    @Test void textOnlyCompletesWithoutAFileAndRevisionIgnoresDatabaseTimestampPrecision() {
-        String before=revision(); vi.setUpdatedAt(LocalDateTime.now()); assertEquals(before,revision());
-        service.submit(1L,"vi",null,revision(),true); var work=service.begin(jobs.getFirst().getId()); service.complete(work,null,0);
-        assertEquals("TEXT_ONLY",audio.getStatus()); assertNull(audio.getFilePath()); assertEquals("COMPLETED",jobs.getFirst().getStatus());
-    }
-    @Test void fullPipelineDoesNotOverwriteAnActiveManualJob() {
-        service.submit(1L,"vi","Manual",revision(),false);
-        assertNull(service.reserveTranslation(1L,"vi",vi.getSourceHash())); assertEquals(1,jobs.size());
-        service.fail(jobs.getFirst().getId(),"TTS failure",3);
-        assertNull(service.reserveTranslation(1L,"vi",vi.getSourceHash()));
+    @Test void publicationRequiresCurrentDefaultLanguageFileAndCompletedTranslation() {
+        when(f.languages.findByIsDefaultTrue()).thenReturn(Optional.of(f.vi));
+        Poi proposed = Poi.builder().descriptionSource(f.poi.getDescriptionSource())
+                .sourceLanguageCode(f.poi.getSourceLanguageCode()).build();
+        assertThrows(IllegalArgumentException.class, () -> f.service.requireDefaultAudioForPublication(proposed, proposed));
+        f.enqueue();
+        assertThrows(IllegalArgumentException.class, () -> f.service.requireDefaultAudioForPublication(proposed, f.poi));
+        f.finish("vi", "Vietnamese narration");
+        assertDoesNotThrow(() -> f.service.requireDefaultAudioForPublication(proposed, f.poi));
+        proposed.setDescriptionSource("New description");
+        assertThrows(IllegalArgumentException.class, () -> f.service.requireDefaultAudioForPublication(proposed, f.poi));
+        proposed.setDescriptionSource(f.poi.getDescriptionSource());
+        f.files.get("vi").setStatus("FAILED");
+        assertThrows(IllegalArgumentException.class, () -> f.service.requireDefaultAudioForPublication(proposed, f.poi));
+        f.files.get("vi").setStatus("COMPLETED");
+        when(f.generator.hasUsableFile(f.files.get("vi").getFilePath())).thenReturn(false);
+        assertThrows(IllegalArgumentException.class, () -> f.service.requireDefaultAudioForPublication(proposed, f.poi));
     }
 
-    @Test void completedTranslationWithFailedAudioQueuesOnlyTts() throws Exception {
-        vi.setSourceHash(hash("Nguồn"));
-        vi.setStatus("COMPLETED");
-        vi.setManualEdit(true);
-        audio.setStatus("FAILED");
-        when(generator.provider("vi")).thenReturn("Google Cloud TTS");
-        PipelineTask task = service.reserveTranslation(1L,"vi",hash("Nguồn"));
-        assertEquals("TTS_ONLY",task.getTaskType());
-        assertTrue(vi.isManualEdit());
+    @Test void createsAllPendingJobsAndSnapshotsBeforeAnyProviderWork() throws Exception {
+        f.enqueue();
+        assertEquals(1, f.poi.getContentRevision()); assertEquals(2, f.jobs.size());
+        for (var task : f.jobs) {
+            assertEquals("PENDING", task.getStatus()); assertEquals(1, task.getSourceRevision());
+            assertEquals("Bonjour Saigon", task.getSourceText()); assertEquals("fr", task.getSourceLanguageCode());
+            assertEquals("[]", task.getProtectedTermsJson()); assertNotNull(task.getSourceHash());
+        }
+        assertEquals(2, f.service.dispatchableIds().size());
+        verify(f.events, times(2)).publishEvent(any(ReviewAudioRequested.class)); verify(f.generator, never()).generate(any(), any(), any());
     }
 
-    @Test void completedTranslationIsSkippedOnlyWhenTheAudioFileExists() throws Exception {
-        vi.setSourceHash(hash("Nguồn"));
-        vi.setStatus("COMPLETED");
-        audio.setStatus("COMPLETED");
-        when(generator.provider("vi")).thenReturn("Google Cloud TTS");
-        when(generator.hasUsableFile("/audio/old.mp3")).thenReturn(true);
-        assertNull(service.reserveTranslation(1L,"vi",hash("Nguồn")));
+    @Test void newerSourceSupersedesEveryOldJobAndRejectsLateTranslationAndFailure() {
+        f.enqueue(); var old = f.claim("en"); long oldId = old.taskId();
+        f.poi.setDescriptionSource("New source B"); f.enqueue();
+        assertEquals(2, f.poi.getContentRevision()); assertEquals(4, f.jobs.size());
+        assertNull(f.service.saveTranslation(old, "Late A"));
+        f.service.fail(old, true, "Late error");
+        assertEquals("PENDING", f.translations.get("en").getStatus()); assertNull(f.translations.get("en").getContent());
+        assertEquals("FAILED", f.jobs.stream().filter(t -> t.getId().equals(oldId)).findFirst().orElseThrow().getStatus());
+        assertEquals("PENDING", f.latest("en").getStatus()); assertEquals("New source B", f.latest("en").getSourceText());
     }
 
-    @Test void missingCompletedAudioIsNotReportedReadyWhenProviderIsUnavailable() throws Exception {
-        vi.setSourceHash(hash("Nguồn"));
-        vi.setStatus("COMPLETED");
-        audio.setStatus("COMPLETED");
-        audio.setFilePath("/audio/file-that-does-not-exist.wav");
-        when(generator.provider("vi")).thenReturn("UNAVAILABLE");
-        when(generator.hasUsableFile(audio.getFilePath())).thenReturn(false);
-        PipelineTask task = service.reserveTranslation(1L,"vi",hash("Nguồn"));
-        assertEquals("TTS_ONLY",task.getTaskType());
+    @Test void lateAudioCannotReplaceNewSourceOrItsAudio() {
+        f.enqueue(); var old = f.translate("en", "English A");
+        f.poi.setDescriptionSource("B"); f.enqueue(); f.finish("en", "English B");
+        String url = f.files.get("en").getFilePath();
+        assertFalse(f.service.complete(old, new AudioGenerationService.GeneratedAudio("/late-A.wav", 1)));
+        f.service.fail(old, false, "Old failure");
+        assertEquals("English B", f.translations.get("en").getContent());
+        assertEquals(url, f.files.get("en").getFilePath()); assertEquals("COMPLETED", f.latest("en").getStatus());
     }
 
-    private static String hash(String value) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                .digest(value.getBytes(StandardCharsets.UTF_8)));
+    @Test void aToBToAStillRejectsTheOriginalAWorker() {
+        f.enqueue(); var old = f.claim("en"); String originalHash = f.poi.getSourceFingerprint();
+        f.poi.setDescriptionSource("B"); f.enqueue(); f.poi.setDescriptionSource("Bonjour Saigon"); f.enqueue();
+        assertEquals(originalHash, f.poi.getSourceFingerprint()); assertEquals(3, f.poi.getContentRevision());
+        assertNull(f.service.saveTranslation(old, "Outdated first A")); assertEquals("PENDING", f.latest("en").getStatus());
     }
+
+    @Test void sourceLanguageAndProtectedTermsInvalidateButTermOrderAndMetadataDoNot() {
+        f.enqueue(); f.finish("vi", "VI"); f.finish("en", "EN");
+        f.poi.setName("Renamed"); f.enqueue(); assertEquals(2, f.jobs.size());
+        f.poi.setSourceLanguageCode("en"); f.enqueue(); assertEquals(2, f.poi.getContentRevision());
+        when(f.terms.findAll()).thenReturn(List.of(ProtectedTerm.builder().term("Saigon").build(), ProtectedTerm.builder().term("Long Saigon").build()));
+        f.enqueue(); assertEquals(3, f.poi.getContentRevision());
+        assertEquals(List.of("Long Saigon", "Saigon"), ContentFingerprint.readTerms(f.latest("en").getProtectedTermsJson()));
+        when(f.terms.findAll()).thenReturn(List.of(ProtectedTerm.builder().term("Long Saigon").build(), ProtectedTerm.builder().term("Saigon").build()));
+        f.enqueue(); assertEquals(3, f.poi.getContentRevision()); assertEquals(6, f.jobs.size());
+    }
+
+    @Test void missingAudioQueuesOnlyTtsWithoutTranslatingAgain() {
+        f.enqueue(); f.finish("vi", "VI"); f.finish("en", "EN");
+        when(f.generator.hasUsableFile(f.files.get("en").getFilePath())).thenReturn(false);
+        f.enqueue(); assertEquals(3, f.jobs.size()); assertEquals("TTS_ONLY", f.latest("en").getTaskType());
+        var work = f.claim("en"); assertEquals("EN", work.text()); assertEquals("COMPLETED", f.translations.get("en").getStatus());
+    }
+
+    @Test void changingSourceDuringManualAudioKeepsManualTextStaleAndAllowsExplicitConfirmation() {
+        f.enqueue(); f.finish("vi", "VI"); f.finish("en", "EN");
+        f.service.submit(1L, "en", "Manual English", revision("en"), false);
+        var old = f.claim("en");
+        f.poi.setDescriptionSource("New source"); f.enqueue();
+        assertEquals("Manual English", f.translations.get("en").getContent()); assertEquals("STALE", f.translations.get("en").getStatus());
+        assertNull(f.files.get("en").getFilePath()); assertFalse(f.service.complete(old, new AudioGenerationService.GeneratedAudio("/old.wav", 1)));
+        assertThrows(IllegalArgumentException.class, () -> f.service.submit(1L, "en", null, revision("en"), true));
+        f.service.submit(1L, "en", "Manual English", revision("en"), false);
+        assertEquals("PENDING", f.latest("en").getStatus()); assertEquals(2, f.latest("en").getSourceRevision());
+        assertEquals("COMPLETED", f.translations.get("en").getStatus()); assertEquals(f.poi.getSourceFingerprint(), f.translations.get("en").getSourceHash());
+    }
+
+    @Test void editQueuesOnlySelectedLanguageAndRegenerationUsesStoredText() {
+        f.enqueue(); f.finish("vi", "VI"); f.finish("en", "EN");
+        var result = f.service.submit(1L, "en", "Manual", revision("en"), false);
+        assertEquals("VI", f.translations.get("vi").getContent()); assertEquals(3, f.jobs.size());
+        assertEquals("PENDING", result.review().task().status()); assertEquals("TTS_ONLY", result.review().task().type());
+        var work = f.claim("en"); assertEquals("Manual", work.text());
+        f.service.complete(work, new AudioGenerationService.GeneratedAudio("/new.wav", 12));
+        f.service.submit(1L, "en", null, revision("en"), true);
+        assertEquals("Manual", f.claim("en").text());
+    }
+
+    @Test void staleBusyBlankOversizeAndInactiveEditsAreRejected() {
+        f.enqueue(); assertThrows(ContentReviewConflictException.class, () -> f.service.submit(1L, "en", "New", revision("en"), false));
+        f.finish("en", "EN");
+        assertThrows(ContentReviewConflictException.class, () -> f.service.submit(1L, "en", "New", "old", false));
+        assertThrows(IllegalArgumentException.class, () -> f.service.submit(1L, "en", " ", revision("en"), false));
+        assertThrows(IllegalArgumentException.class, () -> f.service.submit(1L, "en", "ạ".repeat(21000), revision("en"), false));
+        f.en.setActive(false); assertThrows(IllegalArgumentException.class, () -> f.service.submit(1L, "en", "New", revision("en"), false));
+        assertEquals("EN", f.translations.get("en").getContent());
+    }
+
+    @Test void failedManualAudioPreservesTextAndDoesNotAutomaticallyLoopOnPoiSave() {
+        f.enqueue(); f.finish("en", "EN");
+        f.service.submit(1L, "en", "Manual", revision("en"), false); var work = f.claim("en");
+        f.service.fail(work, false, "TTS unavailable"); f.enqueue();
+        assertEquals(3, f.jobs.size()); assertEquals("FAILED", f.latest("en").getStatus());
+        assertEquals("Manual", f.translations.get("en").getContent()); assertEquals("COMPLETED", f.translations.get("en").getStatus());
+        f.service.submit(1L, "en", null, revision("en"), true); assertEquals("PENDING", f.latest("en").getStatus());
+    }
+
+    @Test void activeLeasePreventsDuplicateClaimAndExpiredLeaseHasNewToken() {
+        f.enqueue(); var first = f.claim("en"); assertNull(f.claim("en"));
+        f.latest("en").setLeaseUntil(LocalDateTime.now().minusSeconds(1));
+        var second = f.claim("en"); assertNotEquals(first.claimToken(), second.claimToken());
+        assertNull(f.service.saveTranslation(first, "Lost claim")); f.service.fail(first, true, "Lost failure");
+        assertEquals("PROCESSING", f.latest("en").getStatus());
+        assertNotNull(f.service.saveTranslation(second, "Current claim"));
+    }
+
+    @Test void restartAfterTranslationResumesAudioWithoutRepeatingTranslation() {
+        f.enqueue(); var first = f.translate("en", "Persisted translation");
+        f.latest("en").setLeaseUntil(LocalDateTime.now().minusSeconds(1));
+        var restarted = new TranslationReviewService(f.pois, f.languages, f.texts, f.audios, f.tasks, f.events, f.generator, f.terms, f.logs);
+        assertTrue(restarted.dispatchableIds().contains(first.taskId())); var recovered = restarted.claim(first.taskId());
+        assertEquals("Persisted translation", recovered.text()); assertNotEquals(first.claimToken(), recovered.claimToken());
+        assertFalse(restarted.complete(first, new AudioGenerationService.GeneratedAudio("/old.wav", 1)));
+        assertTrue(restarted.complete(recovered, new AudioGenerationService.GeneratedAudio("/recovered.wav", 10)));
+        assertEquals("/recovered.wav", f.files.get("en").getFilePath());
+    }
+
+    @Test void attemptBudgetSurvivesReclaimAndTranslationAndAudioBudgetsAreSeparate() {
+        f.enqueue(); var work = f.claim("en");
+        assertEquals(1, f.service.nextAttempt(work, true)); assertEquals(2, f.service.nextAttempt(work, true));
+        f.latest("en").setLeaseUntil(LocalDateTime.now().minusSeconds(1)); work = f.claim("en");
+        assertEquals(3, f.service.nextAttempt(work, true));
+        work = f.service.saveTranslation(work, "EN"); assertEquals(1, f.service.nextAttempt(work, false));
+        assertEquals(3, f.latest("en").getTranslationAttempts()); assertEquals(1, f.latest("en").getAudioAttempts());
+        assertEquals(0, f.service.nextAttempt(work, true)); assertEquals("FAILED", f.latest("en").getStatus());
+    }
+
+    @Test void heartbeatRenewsOnlyTheCurrentClaim() {
+        f.enqueue(); var work = f.claim("en");
+        f.latest("en").setLeaseUntil(LocalDateTime.now().plusSeconds(1)); f.service.renewLease(work);
+        assertTrue(f.latest("en").getLeaseUntil().isAfter(LocalDateTime.now().plusSeconds(50)));
+    }
+
+    @Test void changedTranslationCannotAcceptAnAudioResult() {
+        f.enqueue(); var work = f.translate("en", "EN"); f.translations.get("en").setContent("Changed elsewhere");
+        assertFalse(f.service.complete(work, new AudioGenerationService.GeneratedAudio("/stale.wav", 10)));
+        assertNull(f.files.get("en").getFilePath()); assertEquals("FAILED", f.latest("en").getStatus());
+    }
+
+    @Test void unsupportedLanguageCompletesWithoutAFile() {
+        f.en.setTtsSupported(false); f.enqueue(); var work = f.translate("en", "EN");
+        assertTrue(f.service.complete(work, null)); assertEquals("TEXT_ONLY", f.files.get("en").getStatus());
+        assertEquals("COMPLETED", f.latest("en").getStatus());
+    }
+
+    @Test void missingProviderVoiceIsTextOnlyEvenWhenLanguageFlagAllowsTts() {
+        when(f.generator.supportsLanguage("en")).thenReturn(false);
+        f.enqueue(); var work = f.translate("en", "EN");
+        assertFalse(work.ttsSupported());
+        assertFalse(f.service.detail(1L, "en").review().ttsSupported());
+        assertTrue(f.service.complete(work, null));
+        assertEquals("TEXT_ONLY", f.files.get("en").getStatus());
+        assertThrows(IllegalArgumentException.class, () -> f.service.submit(1L, "en", null, revision("en"), true));
+    }
+
+    @Test void rawSourceChangeCannotBypassFingerprintPublicationCheck() {
+        f.enqueue(); var work = f.claim("en"); f.poi.setDescriptionSource("Changed outside save");
+        assertNull(f.service.saveTranslation(work, "Stale")); assertEquals("FAILED", f.latest("en").getStatus());
+    }
+
+    @Test void readDoesNotSaveOrGenerateAndRevisionIgnoresTimestampPrecision() {
+        f.enqueue(); f.finish("en", "EN"); clearInvocations(f.texts, f.audios, f.tasks, f.events, f.generator);
+        String before = revision("en"); f.translations.get("en").setUpdatedAt(LocalDateTime.now());
+        assertEquals(before, revision("en")); assertEquals(2, f.service.index(1L).languages().size());
+        verify(f.texts, never()).saveAndFlush(any()); verify(f.audios, never()).saveAndFlush(any()); verify(f.tasks, never()).saveAndFlush(any()); verifyNoInteractions(f.events);
+    }
+
+    String revision(String code) { return TranslationReviewService.revision(f.translations.get(code)); }
 }

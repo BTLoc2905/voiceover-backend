@@ -36,4 +36,34 @@ public class PipelineTask {
 
     @Column(name = "finished_at")
     private LocalDateTime finishedAt;
+
+    @Column(name = "source_revision", nullable = false)
+    private long sourceRevision;
+
+    @Column(name = "source_hash", length = 64)
+    private String sourceHash;
+
+    @Column(name = "source_text", columnDefinition = "MEDIUMTEXT")
+    private String sourceText;
+
+    @Column(name = "source_language_code", length = 10)
+    private String sourceLanguageCode;
+
+    @Column(name = "protected_terms_json", columnDefinition = "MEDIUMTEXT")
+    private String protectedTermsJson;
+
+    @Column(name = "translation_revision", length = 64)
+    private String translationRevision;
+
+    @Column(name = "claim_token", length = 36)
+    private String claimToken;
+
+    @Column(name = "lease_until")
+    private LocalDateTime leaseUntil;
+
+    @Column(name = "translation_attempts", nullable = false)
+    private int translationAttempts;
+
+    @Column(name = "audio_attempts", nullable = false)
+    private int audioAttempts;
 }
