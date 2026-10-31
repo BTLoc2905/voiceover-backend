@@ -5,9 +5,13 @@ import "./VoiceMapScreens.css";
 import RoutePlanner from "./RoutePlanner.jsx";
 import RouteJourney from "./RouteJourney.jsx";
 import NarrationAudioScreen from "./NarrationAudioScreen.jsx";
+import LanguagePicker from "./LanguagePicker.jsx";
+import { guestCatalogs, guestText } from "./guestUi.js";
+import "./guestUi.css";
 import useTourLocation from "./useTourLocation.js";
 import useTourNarration from "./useTourNarration.js";
 import { distanceMeters, validPoi } from "./autoNarration.js";
+import { recordActiveVisit, recordAppOpen } from "./narrationApi.js";
 import "./AutoNarration.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -52,12 +56,14 @@ POI_NAMES["Chợ An Đông"].hi = "आन डोंग बाजार";
 const localizedPoiName = (name, language) => POI_NAMES[name]?.[language] || name;
 
 function MapArtwork({ route = false, location, pois = [], controllerRef, language = "vi", routeGeometry, onPoiSelect, fitAllPois = false }) {
+  const t = (key) => guestText(language, key);
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const routeRequest = useRef(null);
   const latestLocation = useRef(location);
   const latestPoints = useRef([]);
   const fittedPois = useRef(false);
+  const fittedRoute = useRef(null);
   const centered = useRef(false);
   useEffect(() => { latestLocation.current = location; }, [location]);
   useEffect(() => {
@@ -82,13 +88,14 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
           const position = latestLocation.current;
           map.fitBounds(L.latLngBounds(position ? [...points, [position.lat, position.lng]] : points), { padding: [40, 40], maxZoom: 16 });
         },
+        invalidateSize: () => map.invalidateSize({ pan: false }),
       };
     }
     return () => {
       if (controllerRef) controllerRef.current = null;
       map.remove();
       mapInstance.current = null;
-      centered.current = false; fittedPois.current = false;
+      centered.current = false; fittedPois.current = false; fittedRoute.current = null;
     };
   }, [controllerRef]);
   useEffect(() => {
@@ -107,7 +114,7 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
     });
     if (location) L.circleMarker([location.lat, location.lng], {
       radius: 8, color: "#fff", weight: 3, fillColor: "#2563eb", fillOpacity: 1,
-    }).addTo(map).bindTooltip("Vị trí của bạn", { direction: "top" });
+    }).addTo(map).bindTooltip(guestText(language, "yourLocation"), { direction: "top" });
     const points = pois.map((item) => item.poi).filter(Boolean).map((poi) => [Number(poi.latitude), Number(poi.longitude)]);
     latestPoints.current = points;
     if (fitAllPois && points.length && !fittedPois.current) {
@@ -144,7 +151,7 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
         entry.textContent = `${route ? `${index + 1}. ` : ""}${name}${Number.isFinite(sibling.distanceMeters) ? ` · ${Math.round(sibling.distanceMeters)} m` : ""}`;
         if (onPoiSelect) {
           const listen = document.createElement("button"); listen.type = "button"; listen.className = "map-listen-button";
-          listen.textContent = siblings.length > 1 ? `Nghe ${name}` : "Nghe thuyết minh";
+          listen.textContent = siblings.length > 1 ? `${guestText(language, "listen")} ${name}` : guestText(language, "listenToNarration");
           listen.addEventListener("click", () => onPoiSelect("audio", sibling.poi.id, "map"));
           entry.append(document.createElement("br"), listen);
         }
@@ -169,9 +176,16 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
         const layer = L.polyline(line.map(([lng, lat]) => [lat, lng]), {
           color: "#2563eb", weight: 5, opacity: 0.9,
         }).addTo(map);
-        map.fitBounds(layer.getBounds(), { padding: [32, 32], maxZoom: 17 });
+        if (fittedRoute.current !== routeGeometry) {
+          map.fitBounds(layer.getBounds(), { padding: [32, 32], maxZoom: 17 });
+          fittedRoute.current = routeGeometry;
+        }
       } else if (points.length) {
-        map.fitBounds(L.latLngBounds(points), { padding: [32, 32], maxZoom: 16 });
+        const key = points.map((point) => point.join(",")).join(";");
+        if (fittedRoute.current !== key) {
+          map.fitBounds(L.latLngBounds(points), { padding: [32, 32], maxZoom: 16 });
+          fittedRoute.current = key;
+        }
       }
     } else if (route && points.length > 1 && location) {
       const coordinates = [[location.lng, location.lat], ...points.map(([lat, lng]) => [lng, lat])];
@@ -210,10 +224,10 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
   return (
     <div className="map-art leaflet-map" ref={mapRef}>
       <div className="map-tools">
-        <button aria-label="Phóng to bản đồ" onClick={() => controllerRef?.current?.zoomIn()}>＋</button>
-        <button aria-label="Thu nhỏ bản đồ" onClick={() => controllerRef?.current?.zoomOut()}>−</button>
-        <button aria-label="Về vị trí hiện tại" onClick={() => controllerRef?.current?.locate()}>◎</button>
-        {fitAllPois && <button aria-label="Xem tất cả POI" title="Xem tất cả POI" onClick={() => controllerRef?.current?.showPois()}>▦</button>}
+        <button aria-label={t("zoomIn")} onClick={() => controllerRef?.current?.zoomIn()}>＋</button>
+        <button aria-label={t("zoomOut")} onClick={() => controllerRef?.current?.zoomOut()}>−</button>
+        <button aria-label={t("goToLocation")} onClick={() => controllerRef?.current?.locate()}>◎</button>
+        {fitAllPois && <button aria-label={t("showAllPlaces")} title={t("showAllPlaces")} onClick={() => controllerRef?.current?.showPois()}>▦</button>}
       </div>
     </div>
   );
@@ -221,44 +235,23 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
 
 function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, language, setLanguage, playback, player }) {
   const mapController = useRef(null);
-  const [languageOpen, setLanguageOpen] = useState(false);
-  const languages = [
-    ["vi", "Tiếng Việt"], ["en", "English"], ["fr", "Français"], ["de", "Deutsch"],
-    ["es", "Español"], ["it", "Italiano"], ["ja", "日本語"], ["ko", "한국어"],
-    ["zh-CN", "简体中文"], ["zh-TW", "繁體中文"], ["th", "ไทย"], ["ru", "Русский"],
-    ["id", "Bahasa Indonesia"], ["pt", "Português"], ["ar", "العربية"], ["ms", "Bahasa Melayu"], ["hi", "हिन्दी"],
-  ];
+  const t = (key) => guestText(language, key);
   return (
     <main className="phone-screen nearby-screen">
       <section className="map-area">
         <MapArtwork location={location} pois={mapPois} controllerRef={mapController} language={language} onPoiSelect={setScreen} fitAllPois />
-        <div className="map-caption"><span className="live-dot" />{location ? `GPS: ±${Math.round(location.accuracy)} m · vùng lân cận 500 m` : "Đang chờ vị trí GPS"}</div>
       </section>
       <section className="bottom-sheet nearby-sheet">
         <div className="sheet-handle" />
         <div className="sheet-heading">
-          <div><small>VỊ TRÍ HIỆN TẠI</small><h1>Điểm tham quan gần bạn <span className="poi-total">({pois.length})</span></h1></div>
-          <div className="language-picker">
-            <button className="language-chip" onClick={() => setLanguageOpen(!languageOpen)}>
-              {language.toUpperCase()}⌄
-            </button>
-            {languageOpen && (
-              <div className="language-menu">
-                {languages.map(([code, label]) => (
-                  <button key={code} onClick={() => {
-                    setLanguage(code);
-                    setLanguageOpen(false);
-                  }}>{label}</button>
-                ))}
-              </div>
-            )}
-          </div>
+          <div><small>{t("currentLocation")}</small><h1>{t("nearbyPlaces")} <span className="poi-total">({pois.length})</span></h1></div>
+          <LanguagePicker language={language} onChange={setLanguage} />
         </div>
-        {loading && <p className="api-state">Đang tải POI thật từ backend...</p>}
+        {loading && <p className="api-state">{t("loadingPois")}</p>}
         {error && <p className="api-state error">{error}</p>}
-        {playback.status === "blocked" && <p className="api-state narration-start-hint" role="status">Chạm để bắt đầu nghe thuyết minh.<button type="button" onClick={() => player.play()}>Phát thuyết minh</button></p>}
+        {playback.status === "blocked" && <p className="api-state narration-start-hint" role="status">{t("tapToListen")}<button type="button" onClick={() => player.play()}>{t("playNarration")}</button></p>}
         {!loading && !error && pois.length === 0 && (
-          <p className="api-state">Không có POI đã xuất bản trong bán kính 500 m quanh bạn.</p>
+          <p className="api-state">{t("noNearby")}</p>
         )}
         <div className="nearby-list">
           {pois.map((poi) => (
@@ -268,20 +261,21 @@ function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, lang
               ) : (
                 <span className={`poi-icon ${poi.poi.id === 1 ? "orange" : "blue"}`}>⌖</span>
               )}
-              <span className="poi-copy"><strong>{localizedPoiName(poi.poi.name, language)}</strong><small>{poi.poi.status}</small></span>
+              <span className="poi-copy"><strong>{localizedPoiName(poi.poi.name, language)}</strong><small>{poi.poi.status === "PUBLISHED" ? t("published") : poi.poi.status}</small></span>
               <span className="poi-distance">{Math.round(poi.distanceMeters)} m<b>›</b></span>
             </button>
           ))}
         </div>
-        <button className="primary-button" onClick={() => setScreen("route")}>Xem lộ trình gợi ý <span>→</span></button>
+        <button className="primary-button" onClick={() => setScreen("route")}>{t("suggestedRoutes")} <span>→</span></button>
       </section>
     </main>
   );
 }
 
-function RouteScreen({ setScreen, location, language, onStartRoute }) {
-  return <RoutePlanner setScreen={setScreen} location={location} language={language}
-    MapComponent={MapArtwork} formatPoiName={localizedPoiName} onStartRoute={onStartRoute} />;
+function RouteScreen({ setScreen, location, language, onLanguageChange, onStartRoute, onPreviewAudio, returnDraft }) {
+  return <RoutePlanner setScreen={setScreen} location={location} language={language} onLanguageChange={onLanguageChange}
+    MapComponent={MapArtwork} formatPoiName={localizedPoiName} onStartRoute={onStartRoute}
+    onPreviewAudio={onPreviewAudio} returnDraft={returnDraft} />;
 }
 
 export default function VoiceMapScreens() {
@@ -291,9 +285,23 @@ export default function VoiceMapScreens() {
   const [loading, setLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
   const [audioBackScreen, setAudioBackScreen] = useState("map");
-  const [language, setLanguage] = useState("vi");
+  const [routeReturnDraft, setRouteReturnDraft] = useState(null);
+  const [language, setLanguage] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem("voicemap-guest-language");
+      return Object.hasOwn(guestCatalogs, saved) ? saved : "vi";
+    } catch { return "vi"; }
+  });
   const { position: location, gpsError } = useTourLocation();
   const { player, playback } = useTourNarration(location, catalog, language);
+  useEffect(() => {
+    void recordAppOpen().catch(() => {});
+    const ping = () => { if (!document.hidden) void recordActiveVisit().catch(() => {}); };
+    ping();
+    const timer = window.setInterval(ping, 60000);
+    document.addEventListener("visibilitychange", ping);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", ping); };
+  }, []);
   useEffect(() => {
     let active = true;
     let request;
@@ -317,21 +325,41 @@ export default function VoiceMapScreens() {
   const pois = useMemo(() => mapPois.filter((item) => item.distanceMeters <= 500)
     .sort((a, b) => a.distanceMeters - b.distanceMeters), [mapPois]);
   const navigate = useCallback((nextScreen, poiId, backScreen = "map") => {
+    // Leaving the narration screen must cancel both active media and an in-flight guide request.
+    if (screen === "audio" && nextScreen !== "audio") player.stop();
+    if (screen === "route" && nextScreen === "map") setRouteReturnDraft(null);
     if (nextScreen === "audio" && poiId != null) {
       const current = player.getSnapshot();
-      if (current.poiId !== poiId || ["idle", "ended", "error"].includes(current.status)) {
+      if (current.poiId !== poiId || current.language !== language || ["idle", "ended", "error"].includes(current.status)) {
         void player.load(poiId, language, { trigger: "TAP_POI" });
       }
       setAudioBackScreen(backScreen);
     }
     setScreen(nextScreen);
-  }, [player, language]);
-  const changeLanguage = (code) => { player.stop(false); setLanguage(code); };
-  return <div className="demo-shell tourist-shell"><div className="tourist-frame">
-    {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError || gpsError} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
-    {screen === "audio" && <NarrationAudioScreen player={player} playback={playback} setScreen={navigate} location={location} pois={mapPois} language={language} backScreen={audioBackScreen} MapComponent={MapArtwork} formatPoiName={localizedPoiName} />}
-    {screen === "route" && <RouteScreen setScreen={navigate} location={location} language={language} onStartRoute={(value) => { setJourney({ ...value, index: 0 }); setScreen("journey"); }} />}
-    {screen === "journey" && journey && <RouteJourney journey={journey} initialLocation={location} gpsError={gpsError}
+  }, [player, language, screen]);
+  const previewAudio = useCallback((id, draft) => {
+    setRouteReturnDraft(draft);
+    navigate("audio", id, "route");
+  }, [navigate]);
+  const changeLanguage = (code) => {
+    if (code === language) return;
+    if (!Object.hasOwn(guestCatalogs, code)) return;
+    const current = player.getSnapshot();
+    setLanguage(code);
+    try { window.localStorage.setItem("voicemap-guest-language", code); } catch { /* Private mode may disable storage. */ }
+    if (screen === "audio" && current.poiId != null) {
+      void player.load(current.poiId, code, { trigger: "TAP_POI" });
+    } else {
+      player.stop(false);
+    }
+  };
+  return <div className="demo-shell tourist-shell" lang={language}><div className="tourist-frame">
+    {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError ? (language === "vi" ? catalogError : guestText(language, "requestFailed")) : gpsError ? (language === "vi" ? gpsError : guestText(language, "locationUnavailable")) : ""} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
+    {screen === "audio" && <NarrationAudioScreen player={player} playback={playback} setScreen={navigate} location={location} pois={mapPois} language={language} onLanguageChange={changeLanguage} backScreen={audioBackScreen} MapComponent={MapArtwork} formatPoiName={localizedPoiName} />}
+    {screen === "route" && <RouteScreen setScreen={navigate} location={location} language={language} onLanguageChange={changeLanguage}
+      returnDraft={routeReturnDraft} onPreviewAudio={previewAudio}
+      onStartRoute={(value) => { setRouteReturnDraft(null); setJourney({ ...value, index: 0 }); setScreen("journey"); }} />}
+    {screen === "journey" && journey && <RouteJourney journey={journey} initialLocation={location} gpsError={gpsError} language={language} onLanguageChange={changeLanguage} formatPoiName={localizedPoiName}
       audioBusy={["loading", "starting", "playing", "paused"].includes(playback.status)}
       onProgress={(index) => setJourney((current) => ({ ...current, index }))}
       onAudio={(id) => navigate("audio", id, "journey")}

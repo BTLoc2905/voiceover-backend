@@ -16,6 +16,9 @@ public class UsageEvent {
     @Column(name = "anon_client_id")
     private String anonClientId;
 
+    @Column(name = "playback_id", length = 64)
+    private String playbackId;
+
     @Column(name = "event_type", nullable = false)
     private String eventType; // APP_OPEN | AUTO_PLAY | TAP_POI | AUDIO_COMPLETED | ROUTE_SELECTED
 

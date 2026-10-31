@@ -1,12 +1,28 @@
-.route-planner .route-map { height: 30%; min-height: 160px; }
+.route-planner .route-map { height: var(--route-map-height, 30%); min-height: 160px; }
 .route-planner .route-sheet { min-height: 0; padding-bottom: 24px; }
+.route-planner .route-sheet-drag { position: sticky; top: -8px; z-index: 10; display: grid; place-items: start center; width: 100%; height: 24px; margin: -8px 0 8px; padding: 8px 0 0; border: 0; background: #fff; cursor: ns-resize; touch-action: none; }
+.route-planner .route-sheet-drag .sheet-handle { display: block; margin: 0; pointer-events: none; }
+.route-selection-box { margin: 0 0 12px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; }
+.route-suggested-heading { margin: 0 0 10px; color: #17233c; font-size: 17px; line-height: 1.3; text-align: center; text-transform: uppercase; }
+.route-language-choice { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; padding: 3px 8px; border: 1px solid #cbd5e1; border-radius: 9px; color: #64748b; font-size: 12px; }
+.route-language-choice .language-chip { display: inline-flex; align-items: center; min-height: 36px; padding: 5px 11px; border: 1px solid #bfdbfe; border-radius: 8px; color: #1d4ed8; background: #eff6ff; font-size: 11px; font-weight: 700; }
+.route-language-choice .language-chip:hover { border-color: #93c5fd; background: #dbeafe; }
+.route-language-choice .language-chip:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.route-language-choice .language-menu { top: calc(100% + 6px); width: 210px; padding: 6px; border-color: #dbeafe; border-radius: 11px; box-shadow: 0 10px 24px #0f172a24; }
+.route-language-choice .language-menu button { padding: 9px 10px; border-radius: 7px; font-size: 12px; }
+.route-language-choice .language-menu button[aria-current="true"] { color: #1d4ed8; background: #eff6ff; font-weight: 700; }
 .route-planner .route-title h1 { margin-bottom: 12px; font-size: 19px; }
-.route-planner .route-legend { font-size: 9px; }
-.route-planner .route-legend a { color: #1d4ed8; }
+.route-details-box { margin: 12px 0; padding: 8px; border: 1px solid #bfdbfe; border-radius: 12px; background: #fff; }
+.route-details-box > .route-language-choice { width: 100%; min-height: 52px; margin: 0 0 10px; padding: 6px 10px; border-color: #bfdbfe; background: #f8fbff; }
 .route-map-stop-marker span { display: grid; place-items: center; width: 28px; height: 28px; color: #fff; background: #2563eb; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 7px #0f172a55; font-size: 12px; font-weight: 700; }
 .route-picker, .route-add-section label { display: grid; gap: 6px; color: #475569; font-size: 12px; font-weight: 600; }
 .route-picker select, .route-add-section input { width: 100%; min-height: 42px; padding: 9px; color: #17233c; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 14px; }
-.route-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; margin: 14px 0; padding: 12px; color: #1e40af; background: #eff6ff; border-radius: 10px; font-size: 12px; }
+.route-selection-box .route-picker select { border-color: #93c5fd; background: #eff6ff; cursor: pointer; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+.route-selection-box .route-picker select:hover:not(:disabled) { border-color: #3b82f6; background: #dbeafe; }
+.route-selection-box .route-picker select:focus-visible { border-color: #2563eb; outline: 3px solid #93c5fd; outline-offset: 2px; box-shadow: 0 0 0 3px #dbeafe; }
+.route-selection-box .route-picker select:disabled { cursor: not-allowed; opacity: .7; }
+.route-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: flex-start; margin: 12px 0 4px; padding: 12px; border: 0; color: #1e40af; background: #eff6ff; border-radius: 10px; text-align: left; font-size: 12px; }
+.route-summary-label { text-transform: uppercase; }
 .route-message { margin: 12px 0; padding: 12px; color: #334155; background: #f1f5f9; border-radius: 9px; font-size: 12px; line-height: 1.6; }
 .route-message.error { color: #991b1b; background: #fef2f2; }
 .route-message button { display: block; min-height: 36px; margin-top: 8px; padding: 6px 12px; color: #1d4ed8; background: #fff; border: 1px solid #cbd5e1; border-radius: 7px; }
@@ -15,19 +31,32 @@
 .route-stop-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .route-stop-name strong { display: block; color: #17233c; font-size: 13px; }
 .route-stop-name small { display: block; margin-top: 4px; color: #64748b; font-size: 11px; }
-.route-stop-actions { display: flex; gap: 3px; flex: none; }
-.route-stop-actions button { min-width: 31px; min-height: 36px; padding: 6px; color: #1d4ed8; background: #eff6ff; border-radius: 6px; font-size: 14px; }
-.route-stop-actions .remove-stop { color: #b91c1c; background: #fef2f2; font-size: 11px; }
+.route-stop-listen { flex: none; min-height: 36px; padding: 6px 10px; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12px; font-weight: 600; }
+.sortable-stop { position: relative; min-height: 62px; }
+.sortable-stop.is-dragging { opacity: .35; }
+.route-drag-handle, .route-more-button { display: grid; flex: none; place-items: center; width: 36px; height: 42px; padding: 0; border: 0; border-radius: 8px; color: #64748b; background: #f1f5f9; }
+.route-drag-handle { touch-action: none; cursor: grab; }
+.route-drag-handle:active { cursor: grabbing; }
+.route-more-button { font-size: 22px; line-height: 1; }
+.route-stop-menu { position: relative; flex: none; }
+.route-stop-menu-popover { position: absolute; top: 40px; right: 0; z-index: 20; min-width: 158px; padding: 5px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; box-shadow: 0 8px 24px #0f172a30; }
+.route-stop-menu-popover.above { top: auto; bottom: 40px; }
+.route-stop-menu-popover button { width: 100%; min-height: 40px; padding: 8px; color: #b91c1c; background: transparent; text-align: left; font-size: 12px; }
+.route-stop-menu-popover small { display: block; padding: 4px 8px; color: #64748b; font-size: 10px; }
+.route-stop-drag-overlay { display: flex; align-items: center; gap: 10px; min-height: 62px; padding: 10px 12px; border: 1px solid #93c5fd; border-radius: 10px; color: #17233c; background: #fff; box-shadow: 0 12px 30px #0f172a33; font-size: 13px; }
+.route-undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; padding: 9px 11px; border-radius: 9px; color: #334155; background: #eff6ff; font-size: 12px; }
+.route-undo button { flex: none; min-height: 36px; padding: 6px 9px; border-radius: 7px; color: #1d4ed8; background: #fff; font-weight: 700; }
 .route-add-section { margin-top: 18px; }
 .route-add-section h2 { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
 .route-candidate-list { max-height: 210px; overflow-y: auto; margin-top: 8px; }
 .route-candidate-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; color: #334155; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
 .route-candidate-list button { flex: none; min-height: 36px; padding: 7px 10px; color: #1d4ed8; background: #eff6ff; border-radius: 7px; font-size: 12px; }
 .route-hint { color: #64748b; font-size: 12px; line-height: 1.6; }
-.route-edit-actions { position: sticky; bottom: -24px; display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; margin-top: 12px; padding: 12px 0; background: #fff; }
+.route-planner .route-sheet-editing { padding-bottom: 104px; }
+.route-edit-actions { position: absolute; right: 0; bottom: 0; left: 0; z-index: 30; display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; padding: 12px 18px max(14px, env(safe-area-inset-bottom)); background: #fff; box-shadow: 0 -6px 20px #0f172a1c; }
 .route-edit-actions .primary-button { margin: 0; }
 .route-secondary-button { min-height: 42px; padding: 10px; color: #334155; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 12px; }
 .route-listen-button { width: 100%; margin-top: 10px; }
 .route-planner button:disabled { cursor: not-allowed; opacity: .45; }
 .route-planner button:focus-visible, .route-planner input:focus-visible, .route-planner select:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
-@media (max-width: 380px) { .route-stop-actions button { min-width: 27px; padding: 4px; } .route-planner .bottom-sheet { padding-left: 12px; padding-right: 12px; } }
+@media (max-width: 380px) { .route-planner .bottom-sheet { padding-left: 12px; padding-right: 12px; } .route-edit-actions { padding-right: 12px; padding-left: 12px; } }

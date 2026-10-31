@@ -64,6 +64,19 @@ test("pause/resume and speed changes do not create duplicate playback events", a
     assert.equal(player.getSnapshot().rate, 1.25); assert.equal(events.length, 1);
   } finally { player.dispose(); }
 });
+test("playback speed controls adjust in both directions and stay within supported bounds", () => {
+  const { player } = setup();
+  try {
+    player.changeRate(-0.25);
+    assert.equal(player.getSnapshot().rate, 0.75);
+    player.changeRate(-0.25);
+    assert.equal(player.getSnapshot().rate, 0.75);
+    for (let i = 0; i < 5; i++) player.changeRate(0.25);
+    assert.equal(player.getSnapshot().rate, 1.5);
+    player.changeRate(0.25);
+    assert.equal(player.getSnapshot().rate, 1.5);
+  } finally { player.dispose(); }
+});
 test("replaying a completed auto guide is a new manual listen, even without GPS eligibility", async () => {
   let eligible = true;
   const { player, spoken, events } = setup({ canAutoStart: () => eligible });
@@ -91,6 +104,49 @@ test("HTML audio uses the same single player, catches autoplay blocks, and recor
     media.reject = false; player.play(); media.onloadedmetadata(); media.onplaying(); player.seek(10);
     assert.equal(media.currentTime, 10); assert.equal(events[0].eventType, "AUTO_PLAY"); media.onended();
     assert.equal(events[1].eventType, "AUDIO_COMPLETED");
+  } finally { player.dispose(); }
+});
+
+test("switching POIs and languages stops the previous real-file playback before starting the next", async () => {
+  let source = "", pauses = 0, plays = 0, created = 0;
+  const media = { paused: true, getAttribute: () => source, set src(value) { source = value; },
+    removeAttribute() { source = ""; }, pause() { pauses++; this.paused = true; }, load() {},
+    play() { plays++; this.paused = false; return Promise.resolve(); } };
+  const { player } = setup({ createAudio: () => { created++; return media; },
+    getGuide: async (id, language) => ({ poiId: id, activeLanguage: language, audioUrl: `/${id}-${language}.mp3` }) });
+  try {
+    await player.load(1, "vi"); player.play(); media.onplaying();
+    assert.equal(source, "/1-vi.mp3"); assert.equal(media.paused, false);
+    await player.load(2, "vi");
+    assert.equal(media.paused, true); assert.equal(source, "");
+    player.play(); media.onplaying(); assert.equal(source, "/2-vi.mp3");
+    await player.load(2, "en");
+    assert.equal(media.paused, true); assert.equal(source, "");
+    player.play(); media.onplaying(); assert.equal(source, "/2-en.mp3");
+    assert.equal(created, 1); assert.equal(plays, 3); assert.equal(player.getSnapshot().status, "playing");
+    assert.equal(pauses, 2);
+  } finally { player.dispose(); }
+});
+test("leaving narration stops a playing MP3 and cancels a pending guide", async () => {
+  let source = "", pauses = 0;
+  const media = { getAttribute: () => source, set src(value) { source = value; },
+    removeAttribute() { source = ""; }, pause() { pauses++; }, load() {}, play() { return Promise.resolve(); } };
+  let resolvePending;
+  const { player } = setup({ createAudio: () => media,
+    getGuide: (id) => id === 1 ? Promise.resolve({ poiId: 1, audioUrl: "/1.mp3", activeLanguage: "vi" })
+      : new Promise((resolve) => { resolvePending = resolve; }) });
+  try {
+    await player.load(1, "vi"); player.play(); media.onplaying();
+    player.stop();
+    assert.equal(player.getSnapshot().status, "idle");
+    assert.equal(source, "");
+    assert.equal(pauses, 1);
+    const pending = player.load(2, "vi");
+    player.stop();
+    resolvePending({ poiId: 2, audioUrl: "/2.mp3", activeLanguage: "vi" });
+    await pending;
+    assert.equal(player.getSnapshot().status, "idle");
+    assert.equal(source, "");
   } finally { player.dispose(); }
 });
 test("segmentation preserves trailing narration and long sentences without punctuation", () => {

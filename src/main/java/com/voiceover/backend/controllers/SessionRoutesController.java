@@ -29,6 +29,12 @@ public class SessionRoutesController {
         return service.sessionView(service.saveSession(id, input.name(), input.description(), input.status()));
     }
 
+    @DeleteMapping("/admin/sessions/{id}")
+    public ResponseEntity<Void> deleteSession(@PathVariable Long id) {
+        service.deleteSession(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping(value = "/admin/sessions/{sessionId}/routes", params = "!name")
     public Object createRoute(@PathVariable Long sessionId, @RequestBody RouteInput input) {
         return service.routeView(service.saveRouteWithStops(sessionId, input.name(), input.status(), input.poiIds()));
@@ -37,6 +43,12 @@ public class SessionRoutesController {
     @PutMapping("/admin/sessions/{sessionId}/routes/{routeId}")
     public Object updateRoute(@PathVariable Long sessionId, @PathVariable Long routeId, @RequestBody RouteInput input) {
         return service.routeView(service.updateRoute(sessionId, routeId, input.name(), input.status(), input.poiIds()));
+    }
+
+    @DeleteMapping("/admin/sessions/{sessionId}/routes/{routeId}")
+    public ResponseEntity<Void> deleteRoute(@PathVariable Long sessionId, @PathVariable Long routeId) {
+        service.deleteRoute(sessionId, routeId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/admin/pois/{poiId}/coverage")
