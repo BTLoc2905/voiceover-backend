@@ -7,9 +7,9 @@ export default defineConfig({
   server: {
     host: true,
     proxy: {
-      '/api': 'http://localhost:8081',
-      '/audio': 'http://localhost:8081',
-      '/storage': 'http://localhost:8081',
+      '/api': 'http://localhost:8080',
+      '/audio': 'http://localhost:8080',
+      '/storage': 'http://localhost:8080',
     },
   },
 })
