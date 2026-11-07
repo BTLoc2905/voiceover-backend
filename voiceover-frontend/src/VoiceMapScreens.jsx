@@ -235,14 +235,59 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
 
 function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, language, setLanguage, playback, player }) {
   const mapController = useRef(null);
+  const sheetDrag = useRef(null);
+  const ignoreSheetClick = useRef(false);
+  const [sheetHeight, setSheetHeight] = useState(null);
   const t = (key) => guestText(language, key);
+  const dragHandleDown = (event) => {
+    ignoreSheetClick.current = false;
+    const sheet = event.currentTarget.closest(".nearby-sheet");
+    const screen = event.currentTarget.closest(".phone-screen");
+    if (!sheet || !screen) return;
+    sheetDrag.current = {
+      pointerId: event.pointerId,
+      y: event.clientY,
+      height: sheet.getBoundingClientRect().height * 100 / screen.clientHeight,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const dragHandleMove = (event) => {
+    const start = sheetDrag.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const distance = event.clientY - start.y;
+    if (Math.abs(distance) > 5) start.moved = true;
+    if (!start.moved) return;
+    const screenHeight = event.currentTarget.closest(".phone-screen")?.clientHeight || 600;
+    setSheetHeight(Math.max(30, Math.min(90, start.height - distance * 100 / screenHeight)));
+  };
+  const dragHandleEnd = (event) => {
+    if (sheetDrag.current?.pointerId !== event.pointerId) return;
+    ignoreSheetClick.current = sheetDrag.current.moved;
+    sheetDrag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
   return (
     <main className="phone-screen nearby-screen">
-      <section className="map-area">
+      <section id="nearby-map" className="map-area">
         <MapArtwork location={location} pois={mapPois} controllerRef={mapController} language={language} onPoiSelect={setScreen} fitAllPois />
       </section>
-      <section className="bottom-sheet nearby-sheet">
-        <div className="sheet-handle" />
+      <section className="bottom-sheet nearby-sheet" style={sheetHeight == null ? undefined : { height: `${sheetHeight}%`, maxHeight: "90%" }}>
+        <button type="button" className="nearby-sheet-drag"
+          aria-label={language === "vi" ? "Kéo để thay đổi kích thước bản đồ" : "Drag to resize the map"}
+          aria-controls="nearby-map" aria-pressed={sheetHeight >= 70}
+          onPointerDown={dragHandleDown} onPointerMove={dragHandleMove}
+          onPointerUp={dragHandleEnd} onPointerCancel={dragHandleEnd}
+          onClick={(event) => {
+            if (ignoreSheetClick.current) { ignoreSheetClick.current = false; return; }
+            const sheet = event.currentTarget.closest(".nearby-sheet");
+            const screen = event.currentTarget.closest(".phone-screen");
+            if (!sheet || !screen) return;
+            const currentHeight = sheet.getBoundingClientRect().height * 100 / screen.clientHeight;
+            setSheetHeight(currentHeight >= 70 ? 40 : 75);
+          }}>
+          <span className="sheet-handle" />
+        </button>
         <div className="sheet-heading">
           <div><small>{t("currentLocation")}</small><h1>{t("nearbyPlaces")} <span className="poi-total">({pois.length})</span></h1></div>
           <LanguagePicker language={language} onChange={setLanguage} />

@@ -21,6 +21,11 @@
   border-radius: 0;
 }
 
+.route-journey .journey-map .leaflet-tooltip {
+  padding-block: 4px;
+  line-height: 1.2;
+}
+
 .route-journey .journey-content {
   display: flex;
   flex: 1;
@@ -38,6 +43,7 @@
   height: 26px;
   padding: 0;
   border: 0;
+  border-bottom: 1px solid #e2e8f0;
   background: #fff;
   cursor: ns-resize;
   touch-action: none;
@@ -141,6 +147,7 @@
 
 .route-journey .journey-language-choice .language-menu button {
   padding: 9px 10px;
+  border: 1px solid #e2e8f0;
   border-radius: 7px;
   font-size: 12px;
 }
@@ -200,23 +207,25 @@
   color: #1e3a5f;
   font-size: 12px;
   line-height: 1.4;
+  text-align: center;
 }
 
 .route-journey .journey-status strong { display: block; font-size: 13px; }
 .route-journey .journey-status p { margin: 6px 0 0; color: #475569; }
-.route-journey .journey-status button { margin-top: 8px; padding: 5px 9px; border-radius: 6px; background: #dbeafe; color: #1d4ed8; }
+.route-journey .journey-status button { margin-top: 8px; padding: 5px 9px; border: 1px solid #93c5fd; border-radius: 6px; background: #dbeafe; color: #1d4ed8; }
 
 .route-journey .journey-listen-button,
 .route-journey .journey-confirm-button {
   width: 100%;
   min-height: 36px;
+  border: 1px solid;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
 }
 
-.route-journey .journey-listen-button { background: #1e3a5f; color: #fff; }
-.route-journey .journey-confirm-button { background: #dcfce7; color: #166534; }
+.route-journey .journey-listen-button { border-color: #142b48; background: #1e3a5f; color: #fff; }
+.route-journey .journey-confirm-button { border-color: #86efac; background: #dcfce7; color: #166534; }
 .route-journey .journey-listen-button:hover { background: #254c7e; }
 .route-journey .journey-confirm-button:hover { background: #bbf7d0; }
 .route-journey .journey-confirm-button:focus-visible { outline: 3px solid #86efac; outline-offset: 2px; }
@@ -235,6 +244,7 @@
   color: #9a3412;
   background: #fff7ed;
   font-size: 12px;
+  font-weight: 700;
   text-align: center;
 }
 

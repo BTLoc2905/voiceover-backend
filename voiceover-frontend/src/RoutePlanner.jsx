@@ -53,7 +53,7 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
   const mapController = useRef(null);
   const drag = useRef(null);
   const ignoreHandleClick = useRef(false);
-  const [mapHeight, setMapHeight] = useState(returnDraft?.mapHeight ?? 30);
+  const [mapHeight, setMapHeight] = useState(returnDraft?.mapHeight ?? 70);
   const beforeEdit = useRef(null);
   const saveRequest = useRef(null);
   const confirmedPreview = useRef(null);
@@ -96,7 +96,7 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
     if (Math.abs(distance) > 5) start.moved = true;
     if (!start.moved) return;
     const screenHeight = event.currentTarget.closest(".phone-screen")?.clientHeight || 600;
-    setMapHeight(Math.max(25, Math.min(72, start.height + distance * 100 / screenHeight)));
+    setMapHeight(Math.max(30, Math.min(85, start.height + distance * 100 / screenHeight)));
   };
   const dragHandleEnd = (event) => {
     if (drag.current?.id !== event.pointerId) return;
@@ -294,7 +294,7 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
       <button type="button" className="route-sheet-drag" aria-label={t("routePreviewMap")} aria-controls="route-preview-map"
         aria-pressed={mapHeight >= 55} onPointerDown={dragHandleDown} onPointerMove={dragHandleMove}
         onPointerUp={dragHandleEnd} onPointerCancel={dragHandleEnd}
-        onClick={() => { if (ignoreHandleClick.current) { ignoreHandleClick.current = false; return; } setMapHeight((height) => height >= 55 ? 30 : 65); }}>
+        onClick={() => { if (ignoreHandleClick.current) { ignoreHandleClick.current = false; return; } setMapHeight((height) => height >= 55 ? 35 : 70); }}>
         <span className="sheet-handle" />
       </button>
       <div className="route-selection-box">
