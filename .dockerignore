@@ -3,3 +3,9 @@
 target
 .env
 README.md
+voiceover-frontend
+voiceover-backend-git
+.venv-edge-tts
+storage
+docs
+*.log
