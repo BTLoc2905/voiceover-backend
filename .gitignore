@@ -1,5 +1,8 @@
 .env
+.env.*
+!.env.example
 
 target/
 .venv-edge-tts/
+__pycache__/
 storage/audio/

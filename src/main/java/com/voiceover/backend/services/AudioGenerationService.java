@@ -192,6 +192,8 @@ public class AudioGenerationService {
                 throw new IOException("Edge-TTS quá thời gian " + edgeTimeoutSeconds + " giây.");
             }
             String result = new String(process.getInputStream().readNBytes(4096), StandardCharsets.UTF_8).strip();
+            if (process.exitValue() == 75)
+                throw new EdgeTtsRetriesExhaustedException("Edge-TTS thất bại: " + result);
             if (process.exitValue() != 0) throw new IOException("Edge-TTS thất bại: " + result);
             JsonNode metadata = mapper.readTree(result);
             int duration = metadata.path("durationSec").asInt();
