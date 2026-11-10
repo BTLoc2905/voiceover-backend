@@ -1,13 +1,42 @@
 const API_BASE = import.meta.env.VITE_API_URL || "";
+let cachedClientId;
+let cachedAppOpenId;
+let appOpenRequest;
 
 export function anonymousClientId() {
+  if (cachedClientId) return cachedClientId;
   const key = "voicemap-anonymous-client-id";
   let id;
   try { id = localStorage.getItem(key); } catch { /* Private browsing can disable storage. */ }
-  if (id && id.length <= 64) return id;
+  if (id && id.length <= 64) return (cachedClientId = id);
   id = globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try { localStorage.setItem(key, id); } catch { /* The current visit still has an ID. */ }
-  return id;
+  return (cachedClientId = id);
+}
+
+export function recordAppOpen() {
+  if (appOpenRequest) return appOpenRequest;
+  const key = "voicemap-app-open-id";
+  let openId = cachedAppOpenId;
+  try { openId = sessionStorage.getItem(key); } catch { /* Session storage may be unavailable. */ }
+  if (!openId) {
+    openId = globalThis.crypto?.randomUUID?.() || `open-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    try { sessionStorage.setItem(key, openId); } catch { /* The database still deduplicates retries with this ID. */ }
+  }
+  cachedAppOpenId = openId;
+  appOpenRequest = recordPlaybackEvent({ eventType: "APP_OPEN", poiId: null, languageCode: null, playbackId: openId }, anonymousClientId())
+    .catch((error) => { appOpenRequest = null; throw error; });
+  return appOpenRequest;
+}
+
+export function recordActiveVisit() {
+  const playbackId = globalThis.crypto?.randomUUID?.() || `active-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return recordPlaybackEvent({ eventType: "APP_ACTIVE", poiId: null, languageCode: null, playbackId }, anonymousClientId());
+}
+
+export function recordRouteSelection(routeId) {
+  const playbackId = globalThis.crypto?.randomUUID?.() || `route-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return recordPlaybackEvent({ eventType: "ROUTE_SELECTED", routeId, poiId: null, languageCode: null, playbackId }, anonymousClientId());
 }
 
 export async function getGuide(poiId, language, signal) {

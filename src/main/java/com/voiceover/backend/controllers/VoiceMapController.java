@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
 import java.math.BigDecimal;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api")
@@ -30,6 +31,7 @@ public class VoiceMapController {
     private final RealContentService realContentService;
     private final AdminAccountRepository adminAccountRepo;
     private final PasswordEncoder passwordEncoder;
+    private final MonitoringService monitoringService;
 
     // ==================== API DU KHÁCH (KHÔNG CẦN ĐĂNG NHẬP - UC01..UC04) ====================
 
@@ -85,20 +87,42 @@ public class VoiceMapController {
     // ==================== API QUẢN TRỊ VIÊN (ADMIN PORTAL & DASHBOARD - UC05..UC11) ====================
 
     @PostMapping("/admin/auth/login")
-    public ResponseEntity<?> adminLogin(@RequestBody Map<String, String> payload) {
+    public ResponseEntity<?> adminLogin(@RequestBody Map<String, String> payload, HttpServletRequest request) {
         String email = payload.getOrDefault("email", "").trim().toLowerCase(Locale.ROOT);
         String password = payload.getOrDefault("password", "");
         AdminAccount account = adminAccountRepo.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Email hoặc mật khẩu không đúng."));
         if (!"ACTIVE".equalsIgnoreCase(account.getStatus())
+                || !"ADMIN".equalsIgnoreCase(account.getRole())
                 || !passwordEncoder.matches(password, account.getPasswordHash())) {
             throw new IllegalArgumentException("Email hoặc mật khẩu không đúng, hoặc tài khoản đã bị vô hiệu hóa.");
         }
+        var old = request.getSession(false);
+        if (old != null) old.invalidate();
+        var session = request.getSession(true);
+        session.setMaxInactiveInterval(8 * 60 * 60);
+        session.setAttribute("adminId", account.getId());
+        session.setAttribute("adminRole", "ADMIN");
         return ResponseEntity.ok(Map.of(
                 "id", account.getId(),
                 "email", account.getEmail(),
                 "fullName", account.getFullName(),
                 "role", account.getRole()));
+    }
+
+    @GetMapping("/admin/auth/me")
+    public ResponseEntity<?> currentAdmin(HttpServletRequest request) {
+        var session = request.getSession(false);
+        var account = adminAccountRepo.findById((Long) session.getAttribute("adminId"))
+                .filter(value -> "ACTIVE".equalsIgnoreCase(value.getStatus()) && "ADMIN".equalsIgnoreCase(value.getRole()))
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED));
+        return ResponseEntity.ok(Map.of("id", account.getId(), "email", account.getEmail(), "fullName", account.getFullName(), "role", account.getRole()));
+    }
+
+    @PostMapping("/admin/auth/logout")
+    public ResponseEntity<Void> adminLogout(HttpServletRequest request) {
+        request.getSession(false).invalidate();
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/admin/pois")
@@ -149,24 +173,6 @@ public class VoiceMapController {
     // UC11: Giám sát hệ thống và thống kê sử dụng thực tế (Cập nhật <= 10s, quy ước Xanh/Vàng/Đỏ)
     @GetMapping("/admin/monitoring/dashboard")
     public ResponseEntity<?> getMonitoringDashboard() {
-        Map<String, Object> dashboard = new LinkedHashMap<>();
-        dashboard.put("poiCount", poiRepo.count());
-        dashboard.put("activePoiCount", poiRepo.findByStatus("PUBLISHED").size());
-        dashboard.put("userCount", usageEventRepo.countDistinctUsers());
-        Map<Long, Long> listensByPoiId = new HashMap<>();
-        for (Object[] row : usageEventRepo.countListensByPoi()) {
-            listensByPoiId.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
-        }
-        List<Map<String, Object>> poiUsage = poiRepo.findAll().stream()
-                .map(poi -> Map.<String, Object>of(
-                        "poiId", poi.getId(),
-                        "poiName", poi.getName(),
-                        "listens", listensByPoiId.getOrDefault(poi.getId(), 0L)))
-                .sorted((left, right) -> Long.compare(
-                        ((Number) right.get("listens")).longValue(),
-                        ((Number) left.get("listens")).longValue()))
-                .toList();
-        dashboard.put("poiUsage", poiUsage);
-        return ResponseEntity.ok(dashboard);
+        return ResponseEntity.ok(monitoringService.dashboard());
     }
 }

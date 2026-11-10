@@ -12,8 +12,8 @@ class PoiGuideReviewTest {
     final TranslationRepository texts=mock(TranslationRepository.class);
     final AudioRepository audios=mock(AudioRepository.class);
     final LanguageRepository languages=mock(LanguageRepository.class);
-    final PipelineService pipeline=mock(PipelineService.class);
-    final PoiService service=new PoiService(pois,texts,audios,languages,mock(RouteStopRepository.class),pipeline,mock(OpenStreetMapPoiService.class),mock(WikimediaImageService.class),mock(TranslationReviewService.class),mock(PoiThumbnailService.class));
+    final TranslationReviewService pipeline=mock(TranslationReviewService.class);
+    final PoiService service=new PoiService(pois,texts,audios,languages,mock(RouteStopRepository.class),pipeline,mock(PoiThumbnailService.class));
     void setup(String name) {
         when(pois.findById(1L)).thenReturn(Optional.of(Poi.builder().id(1L).name(name).status("PUBLISHED").descriptionSource("Nguồn").build()));
         var language=Language.builder().code("vi").isActive(true).isDefault(true).ttsSupported(true).build();
@@ -34,5 +34,16 @@ class PoiGuideReviewTest {
         when(texts.findByPoiIdAndLanguageCode(1L,"vi")).thenReturn(Optional.of(Translation.builder().content("Bản mới").status("COMPLETED").build()));
         when(audios.findByPoiIdAndLanguageCode(1L,"vi")).thenReturn(Optional.of(Audio.builder().filePath("/audio/stale.mp3").status("PROCESSING").build()));
         var guide=service.getPoiAudioGuide(1L,"fr"); assertEquals("vi",guide.get("activeLanguage")); assertTrue((Boolean)guide.get("fallbackUsed")); assertNull(guide.get("audioUrl")); verifyNoInteractions(pipeline);
+    }
+
+    @Test void versionedPoiNeverServesStaleDatabaseOrBuiltInNarration() {
+        setup("Đại học Sài Gòn");
+        var poi = pois.findById(1L).orElseThrow(); poi.setContentRevision(2); poi.setSourceFingerprint("new-hash");
+        poi.setSourceLanguageCode("fr"); poi.setDescriptionSource("Nouveau texte");
+        when(texts.findByPoiIdAndLanguageCode(1L,"vi")).thenReturn(Optional.of(Translation.builder().content("Old translation").sourceHash("old-hash").status("COMPLETED").build()));
+        when(audios.findByPoiIdAndLanguageCode(1L,"vi")).thenReturn(Optional.of(Audio.builder().filePath("/old.wav").status("COMPLETED").build()));
+        var guide = service.getPoiAudioGuide(1L, "vi");
+        assertEquals("Nouveau texte", guide.get("textContent")); assertEquals("fr", guide.get("activeLanguage"));
+        assertNull(guide.get("audioUrl")); verifyNoInteractions(pipeline);
     }
 }

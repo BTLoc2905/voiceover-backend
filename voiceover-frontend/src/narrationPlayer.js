@@ -158,8 +158,8 @@ export class NarrationPlayer {
     this.utterance = null; this.speech?.cancel(); clearInterval(this.timer); this.segmentIndex = index;
     this.update({ time, status: playing ? "ready" : "paused" }); if (playing) this.play();
   }
-  changeRate() {
-    const rate = this.snapshot.rate >= 1.5 ? 0.75 : Number((this.snapshot.rate + 0.25).toFixed(2));
+  changeRate(delta = 0.25) {
+    const rate = Math.max(0.75, Math.min(1.5, Number((this.snapshot.rate + delta).toFixed(2))));
     this.update({ rate });
     if (this.snapshot.guide?.audioUrl && this.audio) this.audio.playbackRate = rate;
     else if (this.snapshot.status === "playing") this.speakSegment(this.segmentIndex || 0);

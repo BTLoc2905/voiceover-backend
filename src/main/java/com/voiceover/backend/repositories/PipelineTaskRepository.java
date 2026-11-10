@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Collection;
 import java.util.Optional;
 public interface PipelineTaskRepository extends JpaRepository<PipelineTask, Long> {
+    @Query("select t.id from PipelineTask t where t.status = 'PENDING' or "
+            + "(t.status = 'PROCESSING' and t.leaseUntil < :now) order by t.id")
+    List<Long> findDispatchableIds(@Param("now") java.time.LocalDateTime now, org.springframework.data.domain.Pageable page);
     @Query("select t.poiId from PipelineTask t where t.id = :id")
     Optional<Long> findPoiIdById(@Param("id") Long id);
     long countByStatus(String status);

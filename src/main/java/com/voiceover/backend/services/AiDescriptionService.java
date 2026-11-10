@@ -176,6 +176,7 @@ public class AiDescriptionService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", draft.getId());
         result.put("poiId", draft.getPoi().getId());
+        result.put("contentRevision", draft.getPoi().getContentRevision());
         result.put("content", draft.getContent());
         result.put("status", draft.getStatus());
         result.put("provider", draft.getProvider());

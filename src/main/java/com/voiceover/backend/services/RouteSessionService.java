@@ -172,6 +172,37 @@ public class RouteSessionService {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void deleteSession(Long sessionId) {
+        Session session = lockSession(sessionId);
+        if (published(session.getStatus())) {
+            throw new RouteConflictException("Hãy chuyển Session về Nháp trước khi xóa.");
+        }
+        for (Route route : routeRepo.findBySessionId(sessionId)) {
+            routeStopRepo.deleteByRouteId(route.getId());
+            routeStopRepo.flush();
+            routeRepo.delete(route);
+        }
+        routeRepo.flush();
+        sessionRepo.delete(session);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void deleteRoute(Long sessionId, Long routeId) {
+        Session session = lockSession(sessionId);
+        if (published(session.getStatus())) {
+            throw new RouteConflictException("Hãy chuyển Session về Nháp trước khi xóa Route.");
+        }
+        Route route = routeRepo.findById(routeId)
+                .orElseThrow(() -> new IllegalArgumentException("Route không tồn tại: " + routeId));
+        if (!sessionId.equals(route.getSessionId())) {
+            throw new IllegalArgumentException("Route không thuộc Session này.");
+        }
+        routeStopRepo.deleteByRouteId(routeId);
+        routeStopRepo.flush();
+        routeRepo.delete(route);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Route updateRoute(Long sessionId, Long routeId, String name, String status, List<Long> poiIds) {
         return writeRoute(sessionId, routeId, name, status, poiIds);
     }

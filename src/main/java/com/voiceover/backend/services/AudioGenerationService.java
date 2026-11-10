@@ -1,5 +1,6 @@
 package com.voiceover.backend.services;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,28 +17,69 @@ import java.util.concurrent.TimeUnit;
 /** Generates a versioned, complete file. No database writes or hidden text truncation. */
 @Service
 public class AudioGenerationService {
-    private final String googleKey, piperExecutable, piperModel, piperLanguage, synthesizeUrl;
+    private final String googleKey, synthesizeUrl, ttsProvider, edgePython, edgeWorker;
+    private final int edgeTimeoutSeconds;
     private final Path storage;
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
     private final ObjectMapper mapper = new ObjectMapper();
     public record GeneratedAudio(String url, int durationSec) {}
-    private static final Map<String, String> LOCALES = Map.ofEntries(
-            Map.entry("vi", "vi-VN"), Map.entry("en", "en-US"), Map.entry("fr", "fr-FR"), Map.entry("de", "de-DE"),
-            Map.entry("es", "es-ES"), Map.entry("it", "it-IT"), Map.entry("ja", "ja-JP"), Map.entry("ko", "ko-KR"),
-            Map.entry("zh-CN", "cmn-CN"), Map.entry("zh-TW", "cmn-TW"), Map.entry("th", "th-TH"), Map.entry("ru", "ru-RU"),
-            Map.entry("id", "id-ID"), Map.entry("pt", "pt-BR"), Map.entry("ar", "ar-XA"), Map.entry("ms", "ms-MY"), Map.entry("hi", "hi-IN"));
+    private record StandardVoice(String locale, String name) {}
+    // Explicit Standard names from https://cloud.google.com/text-to-speech/docs/list-voices-and-types.
+    // Unknown languages are unsupported; never let Google pick a premium voice implicitly.
+    private static final Map<String, StandardVoice> STANDARD_VOICES = Map.ofEntries(
+            Map.entry("vi", new StandardVoice("vi-VN", "vi-VN-Standard-A")),
+            Map.entry("en", new StandardVoice("en-US", "en-US-Standard-A")),
+            Map.entry("fr", new StandardVoice("fr-FR", "fr-FR-Standard-F")),
+            Map.entry("de", new StandardVoice("de-DE", "de-DE-Standard-G")),
+            Map.entry("es", new StandardVoice("es-ES", "es-ES-Standard-F")),
+            Map.entry("it", new StandardVoice("it-IT", "it-IT-Standard-E")),
+            Map.entry("ja", new StandardVoice("ja-JP", "ja-JP-Standard-A")),
+            Map.entry("ko", new StandardVoice("ko-KR", "ko-KR-Standard-A")),
+            Map.entry("zh-CN", new StandardVoice("cmn-CN", "cmn-CN-Standard-A")),
+            Map.entry("zh-TW", new StandardVoice("cmn-TW", "cmn-TW-Standard-A")),
+            Map.entry("th", new StandardVoice("th-TH", "th-TH-Standard-A")),
+            Map.entry("ru", new StandardVoice("ru-RU", "ru-RU-Standard-A")),
+            Map.entry("id", new StandardVoice("id-ID", "id-ID-Standard-A")),
+            Map.entry("pt", new StandardVoice("pt-BR", "pt-BR-Standard-A")),
+            Map.entry("ar", new StandardVoice("ar-XA", "ar-XA-Standard-A")),
+            Map.entry("ms", new StandardVoice("ms-MY", "ms-MY-Standard-A")),
+            Map.entry("hi", new StandardVoice("hi-IN", "hi-IN-Standard-A")));
+    // Verified against edge-tts --list-voices on 26/10/2026. An unavailable voice fails;
+    // the service never silently selects a different language or provider.
+    private static final Map<String, String> EDGE_VOICES = Map.ofEntries(
+            Map.entry("vi", "vi-VN-HoaiMyNeural"), Map.entry("en", "en-US-JennyNeural"),
+            Map.entry("ja", "ja-JP-NanamiNeural"), Map.entry("ko", "ko-KR-SunHiNeural"),
+            Map.entry("zh-CN", "zh-CN-XiaoxiaoNeural"), Map.entry("fr", "fr-FR-DeniseNeural"),
+            Map.entry("de", "de-DE-KatjaNeural"), Map.entry("es", "es-ES-ElviraNeural"),
+            Map.entry("ru", "ru-RU-SvetlanaNeural"), Map.entry("th", "th-TH-PremwadeeNeural"),
+            Map.entry("id", "id-ID-GadisNeural"), Map.entry("it", "it-IT-IsabellaNeural"),
+            Map.entry("pt", "pt-BR-FranciscaNeural"), Map.entry("ar", "ar-SA-ZariyahNeural"),
+            Map.entry("ms", "ms-MY-YasminNeural"), Map.entry("hi", "hi-IN-SwaraNeural"));
 
     public AudioGenerationService(@Value("${google.cloud.api.key:}") String googleKey,
-            @Value("${app.piper.executable:}") String piperExecutable, @Value("${app.piper.model:}") String piperModel,
-            @Value("${app.piper.language:vi}") String piperLanguage, @Value("${app.audio.storage:storage/audio}") String storage,
+            @Value("${app.tts.provider:edge}") String ttsProvider,
+            @Value("${app.tts.edge.python:.venv-edge-tts/Scripts/python.exe}") String edgePython,
+            @Value("${app.tts.edge.worker:scripts/edge_tts_worker.py}") String edgeWorker,
+            @Value("${app.tts.edge.timeout-seconds:90}") int edgeTimeoutSeconds,
+            @Value("${app.audio.storage:storage/audio}") String storage,
             @Value("${app.tts.synthesize-url:https://texttospeech.googleapis.com/v1/text:synthesize}") String synthesizeUrl) {
-        this.googleKey = googleKey; this.piperExecutable = piperExecutable; this.piperModel = piperModel;
-        this.piperLanguage = piperLanguage; this.storage = Paths.get(storage).toAbsolutePath().normalize(); this.synthesizeUrl = synthesizeUrl;
+        if (!Set.of("edge", "google-standard").contains(ttsProvider))
+            throw new IllegalArgumentException("TTS_PROVIDER phải là edge hoặc google-standard.");
+        if (edgeTimeoutSeconds <= 0) throw new IllegalArgumentException("EDGE_TTS_TIMEOUT_SECONDS phải lớn hơn 0.");
+        this.googleKey = googleKey; this.ttsProvider = ttsProvider; this.edgePython = edgePython;
+        this.edgeWorker = edgeWorker; this.edgeTimeoutSeconds = edgeTimeoutSeconds;
+        this.storage = Paths.get(storage).toAbsolutePath().normalize(); this.synthesizeUrl = synthesizeUrl;
+    }
+
+    public boolean supportsStandardVoice(String language) { return STANDARD_VOICES.containsKey(language); }
+    public boolean supportsLanguage(String language) {
+        return "edge".equals(ttsProvider) ? EDGE_VOICES.containsKey(language) : supportsStandardVoice(language);
     }
 
     public String provider(String language) {
+        if (!supportsLanguage(language)) return "UNSUPPORTED";
+        if ("edge".equals(ttsProvider)) return "Edge-TTS";
         if (!googleKey.isBlank()) return "Google Cloud TTS";
-        if (!piperExecutable.isBlank() && !piperModel.isBlank() && piperLanguage.equalsIgnoreCase(language)) return "Piper";
         return "UNAVAILABLE";
     }
 
@@ -50,7 +92,23 @@ public class AudioGenerationService {
             else if (path != null && path.startsWith("/audio/")) prefix = "/audio/";
             else return false;
             Path file = storage.resolve(path.substring(prefix.length())).normalize();
-            return file.startsWith(storage) && Files.isRegularFile(file) && Files.size(file) > 44;
+            if (!file.startsWith(storage) || !Files.isRegularFile(file)) return false;
+            String lower = file.getFileName().toString().toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".mp3") && Files.size(file) > 128) {
+                try (InputStream stream = Files.newInputStream(file)) {
+                    byte[] head = stream.readNBytes(3);
+                    return head.length == 3 && ((head[0] == 'I' && head[1] == 'D' && head[2] == '3')
+                            || ((head[0] & 0xff) == 0xff && (head[1] & 0xe0) == 0xe0));
+                }
+            }
+            if (lower.endsWith(".wav") && Files.size(file) > 44) {
+                try (InputStream stream = Files.newInputStream(file)) {
+                    byte[] head = stream.readNBytes(12);
+                    return head.length == 12 && new String(head, 0, 4, StandardCharsets.US_ASCII).equals("RIFF")
+                            && new String(head, 8, 4, StandardCharsets.US_ASCII).equals("WAVE");
+                }
+            }
+            return false;
         } catch (IllegalArgumentException | IOException | SecurityException error) {
             return false;
         }
@@ -59,21 +117,38 @@ public class AudioGenerationService {
     public GeneratedAudio generate(Long poiId, String language, String text) throws Exception {
         if (!language.matches("[A-Za-z0-9-]{1,10}")) throw new IllegalArgumentException("Mã ngôn ngữ không hợp lệ.");
         if (text == null || text.isBlank()) throw new IllegalArgumentException("Bản dịch chưa có nội dung.");
-        if (provider(language).equals("UNAVAILABLE")) throw new IllegalStateException("Chưa cấu hình dịch vụ tạo file audio cho ngôn ngữ này. Bản dịch đã lưu; có thể nghe thử bằng giọng trình duyệt nếu thiết bị hỗ trợ.");
+        if (!supportsLanguage(language)) throw new IllegalArgumentException("Ngôn ngữ này không có giọng của TTS provider đang chọn.");
+        if ("google-standard".equals(ttsProvider) && googleKey.isBlank())
+            throw new IllegalStateException("Chưa cấu hình GOOGLE_CLOUD_API_KEY cho Google Standard TTS.");
         Files.createDirectories(storage);
-        String name = "poi_" + poiId + "_" + language + "_" + UUID.randomUUID() + ".wav";
+        String name = "poi_" + poiId + "_" + language + "_" + UUID.randomUUID()
+                + ("edge".equals(ttsProvider) ? ".mp3" : ".wav");
         Path destination = storage.resolve(name), temporary = storage.resolve(name + ".partial");
         try {
-            if (!googleKey.isBlank()) google(text, language, temporary); else piper(text, temporary);
             int duration;
-            try (AudioInputStream audio = AudioSystem.getAudioInputStream(temporary.toFile())) {
-                if (audio.getFrameLength() <= 0) throw new IOException("Dịch vụ không tạo được nội dung audio hợp lệ.");
-                duration = Math.max(1, (int) Math.ceil(audio.getFrameLength() / audio.getFormat().getFrameRate()));
+            if ("edge".equals(ttsProvider)) duration = edge(text, EDGE_VOICES.get(language), temporary);
+            else {
+                google(text, language, temporary);
+                try (AudioInputStream audio = AudioSystem.getAudioInputStream(temporary.toFile())) {
+                    if (audio.getFrameLength() <= 0) throw new IOException("Dịch vụ không tạo được nội dung audio hợp lệ.");
+                    duration = Math.max(1, (int) Math.ceil(audio.getFrameLength() / audio.getFormat().getFrameRate()));
+                }
             }
             try { Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE); }
             catch (AtomicMoveNotSupportedException ignored) { Files.move(temporary, destination); }
             return new GeneratedAudio("/storage/audio/" + name, duration);
         } finally { Files.deleteIfExists(temporary); }
+    }
+
+    /** Only a newly generated, rejected result may be discarded; never accepts arbitrary paths. */
+    public void discard(GeneratedAudio generated) throws IOException {
+        if (!generated.url().startsWith("/storage/audio/")) throw new IllegalArgumentException("Đường dẫn audio không hợp lệ.");
+        String name = generated.url().substring("/storage/audio/".length());
+        if (!name.matches("poi_[0-9]+_[A-Za-z0-9-]+_[a-f0-9-]+\\.(wav|mp3)"))
+            throw new IllegalArgumentException("Đường dẫn audio không hợp lệ.");
+        Path file = storage.resolve(name).normalize();
+        if (!file.startsWith(storage)) throw new IllegalArgumentException("Đường dẫn audio không hợp lệ.");
+        Files.deleteIfExists(file);
     }
 
     /** Each request stays below Google's 5,000 UTF-8 byte limit; joining retains every character. */
@@ -95,14 +170,52 @@ public class AudioGenerationService {
         return result;
     }
 
+    private int edge(String text, String voice, Path temporary) throws Exception {
+        Path worker = Paths.get(edgeWorker).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(worker)) throw new IllegalStateException("Không tìm thấy Edge-TTS worker: " + worker);
+        String python = edgePython;
+        if (python.contains("/") || python.contains("\\")) {
+            Path executable = Paths.get(python).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(executable))
+                throw new IllegalStateException("Không tìm thấy Python Edge-TTS: " + executable
+                        + ". Cài requirements-edge-tts.txt hoặc đặt EDGE_TTS_PYTHON.");
+            python = executable.toString();
+        }
+        Path input = Files.createTempFile(storage, "edge-input-", ".txt");
+        Process process = null;
+        try {
+            Files.writeString(input, text, StandardCharsets.UTF_8);
+            process = new ProcessBuilder(python, worker.toString(), "--input", input.toString(),
+                    "--output", temporary.toString(), "--voice", voice).redirectErrorStream(true).start();
+            if (!process.waitFor(edgeTimeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS);
+                throw new IOException("Edge-TTS quá thời gian " + edgeTimeoutSeconds + " giây.");
+            }
+            String result = new String(process.getInputStream().readNBytes(4096), StandardCharsets.UTF_8).strip();
+            if (process.exitValue() != 0) throw new IOException("Edge-TTS thất bại: " + result);
+            JsonNode metadata = mapper.readTree(result);
+            int duration = metadata.path("durationSec").asInt();
+            long bytes = metadata.path("bytes").asLong();
+            if (duration <= 0 || bytes <= 128 || !Files.isRegularFile(temporary) || Files.size(temporary) != bytes)
+                throw new IOException("Edge-TTS trả metadata MP3 không hợp lệ.");
+            return duration;
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS);
+            }
+            Files.deleteIfExists(input);
+        }
+    }
+
     private void google(String text, String language, Path temporary) throws Exception {
+        StandardVoice voice = STANDARD_VOICES.get(language);
         // LINEAR16 contains a WAV header. Decode each container and write ONE WAV, not concatenated MP3 headers.
         try (RandomAccessFile output = new RandomAccessFile(temporary.toFile(), "rw")) {
             output.setLength(44); output.seek(44);
             AudioFormat format = null; long length = 0;
             for (String part : chunks(text)) {
                 String body = mapper.writeValueAsString(Map.of("input", Map.of("text", part),
-                        "voice", Map.of("languageCode", LOCALES.getOrDefault(language, language), "ssmlGender", "NEUTRAL"),
+                        "voice", Map.of("languageCode", voice.locale(), "name", voice.name()),
                         "audioConfig", Map.of("audioEncoding", "LINEAR16", "sampleRateHertz", 24000)));
                 HttpRequest request = HttpRequest.newBuilder(URI.create(synthesizeUrl)).timeout(Duration.ofSeconds(45))
                         .header("Content-Type", "application/json").header("X-Goog-Api-Key", googleKey)
@@ -128,19 +241,6 @@ public class AudioGenerationService {
         }
     }
 
-    private void piper(String text, Path temporary) throws Exception {
-        Path input = Files.createTempFile(storage, "piper-input-", ".txt");
-        Process process = null;
-        try {
-            Files.writeString(input, text + System.lineSeparator(), StandardCharsets.UTF_8);
-            process = new ProcessBuilder(piperExecutable, "--model", piperModel, "--output_file", temporary.toString())
-                    .redirectInput(input.toFile()).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-            if (!process.waitFor(90, TimeUnit.SECONDS) || process.exitValue() != 0) throw new IOException("Piper không tạo được audio. Kiểm tra model/ngôn ngữ rồi thử lại.");
-        } finally {
-            if (process != null && process.isAlive()) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
-            Files.deleteIfExists(input);
-        }
-    }
     private static void little16(RandomAccessFile out, int value) throws IOException { out.writeShort(Short.reverseBytes((short) value)); }
     private static void little32(RandomAccessFile out, int value) throws IOException { out.writeInt(Integer.reverseBytes(value)); }
 }

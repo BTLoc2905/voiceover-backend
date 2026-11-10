@@ -112,4 +112,44 @@ class RouteSessionServiceTest {
         assertTrue(service.getSuggestedRoutes().isEmpty());
         verifyNoInteractions(directions);
     }
+
+    @Test
+    void deletingRouteRemovesStopsBeforeRouteAndChecksOwnership() {
+        Session draft = Session.builder().id(3L).status("DRAFT").build();
+        Route route = Route.builder().id(8L).sessionId(3L).status("PUBLISHED").build();
+        when(sessions.findForUpdate(3L)).thenReturn(Optional.of(draft));
+        when(routes.findById(8L)).thenReturn(Optional.of(route));
+        service.deleteRoute(3L, 8L);
+        var order = inOrder(stops, routes);
+        order.verify(stops).deleteByRouteId(8L);
+        order.verify(stops).flush();
+        order.verify(routes).delete(route);
+
+        route.setSessionId(4L);
+        assertThrows(IllegalArgumentException.class, () -> service.deleteRoute(3L, 8L));
+        draft.setStatus("PUBLISHED");
+        assertThrows(com.voiceover.backend.services.RouteConflictException.class, () -> service.deleteRoute(3L, 8L));
+    }
+
+    @Test
+    void deletingDraftSessionClearsChildRoutesButPublishedSessionIsProtected() {
+        Session draft = Session.builder().id(3L).status("DRAFT").build();
+        Route first = Route.builder().id(8L).sessionId(3L).build();
+        Route second = Route.builder().id(9L).sessionId(3L).build();
+        when(sessions.findForUpdate(3L)).thenReturn(Optional.of(draft));
+        when(routes.findBySessionId(3L)).thenReturn(List.of(first, second));
+        service.deleteSession(3L);
+        var order = inOrder(stops, routes, sessions);
+        order.verify(stops).deleteByRouteId(8L);
+        order.verify(stops).flush();
+        order.verify(routes).delete(first);
+        order.verify(stops).deleteByRouteId(9L);
+        order.verify(stops).flush();
+        order.verify(routes).delete(second);
+        order.verify(routes).flush();
+        order.verify(sessions).delete(draft);
+
+        draft.setStatus("PUBLISHED");
+        assertThrows(com.voiceover.backend.services.RouteConflictException.class, () -> service.deleteSession(3L));
+    }
 }

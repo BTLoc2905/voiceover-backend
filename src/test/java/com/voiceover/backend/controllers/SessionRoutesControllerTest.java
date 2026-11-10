@@ -41,4 +41,16 @@ class SessionRoutesControllerTest {
         mvc.perform(get("/api/public/routes/8/leg?targetId=2&lat=10.7&lng=106.6"))
                 .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.message").value("Directions không khả dụng"));
     }
+
+    @Test void deleteEndpointsReturnNoContentAndExposeConflicts() throws Exception {
+        mvc.perform(delete("/api/admin/sessions/3/routes/8")).andExpect(status().isNoContent());
+        verify(service).deleteRoute(3L, 8L);
+        mvc.perform(delete("/api/admin/sessions/3")).andExpect(status().isNoContent());
+        verify(service).deleteSession(3L);
+        doThrow(new RouteConflictException("Hãy chuyển Session về Nháp trước khi xóa."))
+                .when(service).deleteSession(4L);
+        mvc.perform(delete("/api/admin/sessions/4"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Hãy chuyển Session về Nháp trước khi xóa."));
+    }
 }

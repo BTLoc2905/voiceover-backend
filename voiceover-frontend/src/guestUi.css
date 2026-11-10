@@ -1,0 +1,5 @@
+.route-topbar { right: 14px; }
+.route-topbar strong { min-width: 0; }
+.route-topbar .language-picker { pointer-events: auto; }
+.route-topbar .language-chip { max-width: 118px; }
+.journey-language-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

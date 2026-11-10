@@ -27,6 +27,6 @@ public class RouteErrorHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<?> constraint(DataIntegrityViolationException error) {
         return ResponseEntity.status(409).body(Map.of("code", "DATA_CONFLICT", "message",
-                "Dữ liệu còn được tham chiếu hoặc schema chưa cập nhật. Hãy tải lại và kiểm tra migration V12 nếu lưu bản nháp trên 10 điểm."));
+                "Không thể lưu hoặc xóa vì dữ liệu còn được tham chiếu. Hãy tải lại và kiểm tra các Route liên quan."));
     }
 }

@@ -2,268 +2,104 @@ package com.voiceover.backend.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.voiceover.backend.entities.*;
-import com.voiceover.backend.repositories.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.http.*;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PipelineService {
-
-    private final LanguageRepository languageRepo;
-    private final TranslationRepository translationRepo;
-    private final AudioRepository audioRepo;
-    private final ProtectedTermRepository protectedTermRepo;
-    private final PipelineTaskRepository pipelineTaskRepo;
-    private final SystemLogRepository systemLogRepo;
-    private final PoiRepository poiRepo;
-    private final TranslationReviewService reviewService;
+    private final TranslationReviewService jobs;
     private final AudioGenerationService audioGenerator;
+    private final Map<Long, TranslationReviewService.Work> active = new ConcurrentHashMap<>();
 
-    @Value("${google.cloud.api.key:}")
-    private String googleCloudApiKey;
-
-    @Value("${app.translation.timeout-seconds:20}")
-    private int translationTimeoutSeconds;
-
-    @Value("${app.translation.cloud-url:https://translation.googleapis.com/language/translate/v2}")
-    private String cloudTranslationUrl;
-
-    @Value("${app.translation.unofficial-url:https://translate.googleapis.com/translate_a/single}")
-    private String unofficialTranslationUrl;
-
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    @Value("${google.cloud.api.key:}") private String googleCloudApiKey;
+    @Value("${app.translation.timeout-seconds:20}") private int translationTimeoutSeconds;
+    @Value("${app.translation.cloud-url:https://translation.googleapis.com/language/translate/v2}") private String cloudTranslationUrl;
+    @Value("${app.translation.unofficial-url:https://translate.googleapis.com/translate_a/single}") private String unofficialTranslationUrl;
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** Both source-pipeline and review jobs use the same claim and publication checks. */
     @Async("pipelineExecutor")
-    public void triggerFullPipelineForPoi(Poi poi) {
-        if (poi.getDescriptionSource() == null || poi.getDescriptionSource().isBlank()) {
-            log("pipeline", "ERROR", "Mô tả gốc của POI ID " + poi.getId() + " không hợp lệ (UC08-E3).");
-            return;
-        }
-
-        String currentHash = sha256(poi.getDescriptionSource());
-        List<Language> activeLanguages = languageRepo.findByIsActiveTrue();
-        List<ProtectedTerm> terms = protectedTermRepo.findAll();
-
-        for (Language lang : activeLanguages) {
-            PipelineTask task = null;
-            try {
-                task = reviewService.reserveTranslation(poi.getId(), lang.getCode(), currentHash);
-                if (task != null) processLanguageTranslationAndTts(poi, lang, terms, currentHash, task);
-            } catch (Exception error) {
-                if (task != null) {
-                    try { failTask(task, "Pipeline thất bại: " + safeMessage(error)); }
-                    catch (Exception persistenceError) {
-                        log("pipeline", "ERROR", "Không lưu được lỗi pipeline POI " + poi.getId()
-                                + " [" + lang.getCode() + "]: " + safeMessage(persistenceError));
-                    }
-                }
-                log("pipeline", "ERROR", "Không xử lý được POI " + poi.getId() + " ["
-                        + lang.getCode() + "]: " + safeMessage(error));
-            }
-        }
-    }
-
-    @Transactional
-    public List<Long> requeueInterruptedTasks() {
-        List<PipelineTask> interrupted = pipelineTaskRepo.findByTaskTypeAndStatusIn(
-                "TRANSLATE_TTS", List.of("PROCESSING"));
-        for (PipelineTask task : interrupted) {
-            task.setStatus("PENDING");
-            task.setErrorMessage("Đang khôi phục tác vụ bị gián đoạn khi backend khởi động lại.");
-            pipelineTaskRepo.save(task);
-        }
-        return interrupted.stream().map(PipelineTask::getId).toList();
-    }
-
-    @Async("pipelineExecutor")
-    public void resumeTask(Long taskId) {
-        PipelineTask task = pipelineTaskRepo.findById(taskId).orElse(null);
-        if (task == null || !"PENDING".equals(task.getStatus())
-                || !"TRANSLATE_TTS".equals(task.getTaskType())) return;
-        Poi poi = poiRepo.findById(task.getPoiId()).orElse(null);
-        Language language = languageRepo.findById(task.getTargetLanguageCode()).orElse(null);
-        if (poi == null || language == null) {
-            failTask(task, "Không tìm thấy POI hoặc ngôn ngữ để khôi phục tác vụ.");
-            return;
-        }
+    public CompletableFuture<Void> resumeTask(Long taskId) {
+        TranslationReviewService.Work work = null;
+        boolean translating = false;
         try {
-            task.setStatus("PROCESSING");
-            task.setErrorMessage(null);
-            pipelineTaskRepo.save(task);
-            processLanguageTranslationAndTts(poi, language, protectedTermRepo.findAll(),
-                    sha256(poi.getDescriptionSource() == null ? "" : poi.getDescriptionSource()), task);
+            work = jobs.claim(taskId);
+            if (work == null) return CompletableFuture.completedFuture(null);
+            active.put(taskId, work);
+            if (work.text() == null) {
+                translating = true;
+                final var input = work;
+                String translated = callWithRetry(input, true, () -> translateRealApiWithProtectedTerms(
+                        input.sourceText(), input.sourceLanguage(), input.code(), input.terms()));
+                if (translated == null) return CompletableFuture.completedFuture(null);
+                work = jobs.saveTranslation(work, translated);
+                if (work == null) return CompletableFuture.completedFuture(null);
+            }
+            translating = false;
+            if (!work.ttsSupported()) {
+                jobs.complete(work, null);
+                return CompletableFuture.completedFuture(null);
+            }
+            final var input = work;
+            var generated = callWithRetry(input, false, () -> audioGenerator.generate(input.poiId(), input.code(), input.text()));
+            if (generated != null && !jobs.complete(work, generated)) audioGenerator.discard(generated);
         } catch (Exception error) {
-            failTask(task, "Khôi phục pipeline thất bại: " + safeMessage(error));
+            if (work != null) {
+                try { jobs.fail(work, translating, "Pipeline thất bại: " + safeMessage(error)); }
+                catch (Exception persistenceError) { log.error("Không lưu được trạng thái task {}; lease sẽ được nhận lại", taskId, persistenceError); }
+            } else log.error("Không nhận được task {}; giữ trong DB để thử lại", taskId, error);
+        } finally {
+            active.remove(taskId);
+        }
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Scheduled(fixedDelay = 10000)
+    public void renewLeases() {
+        for (var work : active.values()) {
+            try { jobs.renewLease(work); }
+            catch (Exception error) { log.warn("Không gia hạn được task {}", work.taskId(), error); }
         }
     }
 
-    public void failRecoveredTask(Long taskId, String message) {
-        pipelineTaskRepo.findById(taskId).ifPresent(task -> failTask(task, message));
-    }
-
-    private void processLanguageTranslationAndTts(Poi poi, Language lang, List<ProtectedTerm> terms, String sourceHash, PipelineTask task) {
-        if (poi.getSourceLanguageCode() == null || poi.getSourceLanguageCode().isBlank()) {
-            failTask(task, "POI chưa có mã ngôn ngữ nguồn hợp lệ.");
-            return;
-        }
-        Translation translation = translationRepo.findByPoiIdAndLanguageCode(poi.getId(), lang.getCode())
-                .orElse(Translation.builder().poiId(poi.getId()).languageCode(lang.getCode()).build());
-        if (translation.isManualEdit() && "COMPLETED".equals(translation.getStatus())
-                && !sourceHash.equals(translation.getSourceHash())) {
-            failTask(task, "Mô tả nguồn đã đổi; giữ nguyên bản dịch Admin chỉnh tay. Hãy rà soát và lưu lại bản dịch trước khi tạo audio.");
-            return;
-        }
-        boolean translationReady = sourceHash.equals(translation.getSourceHash())
-                && "COMPLETED".equals(translation.getStatus())
-                && translation.getContent() != null && !translation.getContent().isBlank();
-        if ("TTS_ONLY".equals(task.getTaskType()) && !translationReady) {
-            failTask(task, "Bản dịch không còn khớp nội dung nguồn. Hãy lưu lại POI để chạy dịch và tạo audio.");
-            return;
-        }
-
-        if (!translationReady) {
-            translation.setStatus("PROCESSING");
-            translationRepo.save(translation);
-            String translatedText = translateWithRetry(poi.getDescriptionSource(), poi.getSourceLanguageCode(),
-                    lang.getCode(), terms, task);
-            if (translatedText == null) return;
-            translation.setContent(translatedText);
-            translation.setSourceHash(sourceHash);
-            translation.setManualEdit(false);
-            translation.setStatus("COMPLETED");
-            translation = translationRepo.save(translation);
-            task.setRetryCount(0);
-        }
-
-        // Bước 2: Kiểm tra ngôn ngữ có hỗ trợ TTS không (UC08-E4)
-        if (!lang.isTtsSupported()) {
-            Audio textOnlyAudio = audioRepo.findByPoiIdAndLanguageCode(poi.getId(), lang.getCode())
-                    .orElse(Audio.builder().poiId(poi.getId()).languageCode(lang.getCode()).translationId(translation.getId()).build());
-            textOnlyAudio.setStatus("TEXT_ONLY");
-            textOnlyAudio.setFilePath(null);
-            audioRepo.save(textOnlyAudio);
-
-            task.setStatus("COMPLETED");
-            task.setErrorMessage(null);
-            task.setFinishedAt(LocalDateTime.now());
-            pipelineTaskRepo.save(task);
-            return;
-        }
-
-        // Không có key trả bản văn bản để frontend đọc bằng SpeechSynthesis miễn phí.
-        if (audioGenerator.provider(lang.getCode()).equals("UNAVAILABLE")) {
-            Audio textOnlyAudio = audioRepo.findByPoiIdAndLanguageCode(poi.getId(), lang.getCode())
-                    .orElse(Audio.builder().poiId(poi.getId()).languageCode(lang.getCode())
-                            .translationId(translation.getId()).build());
-            textOnlyAudio.setStatus("TEXT_ONLY");
-            textOnlyAudio.setFilePath(null);
-            audioRepo.save(textOnlyAudio);
-            task.setStatus("COMPLETED");
-            task.setErrorMessage(null);
-            task.setFinishedAt(LocalDateTime.now());
-            pipelineTaskRepo.save(task);
-            log("pipeline", "INFO", "Đã hoàn tất bản dịch; dùng giọng đọc trình duyệt cho POI "
-                    + poi.getId() + " [" + lang.getCode() + "]");
-            return;
-        }
-
-        // Bước 3: Tổng hợp giọng nói TTS ra file MP3 thật (Thử lại tối đa 3 lần - UC08-E2)
-        generateAudioWithRetry(translation, task);
-    }
-
-    private void generateAudioWithRetry(Translation translation, PipelineTask task) {
-        Audio audio = audioRepo.findByPoiIdAndLanguageCode(translation.getPoiId(), translation.getLanguageCode())
-                .orElse(Audio.builder().poiId(translation.getPoiId()).languageCode(translation.getLanguageCode()).build());
-        audio.setTranslationId(translation.getId()); audio.setStatus("PROCESSING"); audio.setFilePath(null); audio.setDurationSec(null);
-        audioRepo.save(audio);
-        int firstAttempt = Math.max(1, task.getRetryCount() + 1);
-        if (firstAttempt > 3) {
-            audio.setStatus("FAILED"); audioRepo.save(audio);
-            failTask(task, "Đã hết số lần thử tạo audio. Hãy tạo lại audio để thử lại.");
-            return;
-        }
-        for (int attempt = firstAttempt; attempt <= 3; attempt++) {
-            try {
-                var generated = audioGenerator.generate(translation.getPoiId(), translation.getLanguageCode(), translation.getContent());
-                audio.setFilePath(generated.url()); audio.setDurationSec(generated.durationSec()); audio.setStatus("COMPLETED"); audioRepo.save(audio);
-                task.setStatus("COMPLETED"); task.setRetryCount(attempt - 1); task.setErrorMessage(null);
-                task.setFinishedAt(LocalDateTime.now()); pipelineTaskRepo.save(task);
-                log("pipeline", "INFO", "Đã tạo audio đầy đủ cho POI " + translation.getPoiId() + " [" + translation.getLanguageCode() + "]");
-                return;
-            } catch (Exception error) {
-                task.setRetryCount(attempt);
+    private <T> T callWithRetry(TranslationReviewService.Work work, boolean translating, Callable<T> provider) throws Exception {
+        while (true) {
+            int attempt = jobs.nextAttempt(work, translating);
+            if (attempt == 0) return null;
+            try { return provider.call(); }
+            catch (Exception error) {
                 if (error instanceof InterruptedException) Thread.currentThread().interrupt();
                 if (attempt >= 3 || !ProviderRetry.isRetryable(error)) {
-                    audio.setStatus("FAILED"); audioRepo.save(audio);
-                    failTask(task, "Tạo audio thất bại: " + safeMessage(error)); return;
+                    jobs.fail(work, translating, (translating ? "Dịch thuật thất bại: " : "Tạo audio thất bại: ") + safeMessage(error));
+                    return null;
                 }
-                try {
-                    ProviderRetry.pause(attempt);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    audio.setStatus("FAILED"); audioRepo.save(audio);
-                    failTask(task, "Tạo audio bị gián đoạn. Có thể thử lại sau.");
-                    return;
-                }
+                ProviderRetry.pause(attempt);
             }
         }
     }
 
-    private String translateWithRetry(String sourceText, String sourceLang, String targetLang,
-            List<ProtectedTerm> terms, PipelineTask task) {
-        for (int attempt = Math.max(1, task.getRetryCount() + 1); attempt <= 3; attempt++) {
-            try {
-                String translated = translateRealApiWithProtectedTerms(sourceText, sourceLang, targetLang, terms);
-                if (translated == null || translated.isBlank()) throw new IOException("Dịch vụ không trả nội dung bản dịch.");
-                return translated;
-            } catch (Exception error) {
-                task.setRetryCount(attempt);
-                if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-                if (attempt >= 3 || !ProviderRetry.isRetryable(error)) {
-                    Translation translation = translationRepo.findByPoiIdAndLanguageCode(
-                            task.getPoiId(), task.getTargetLanguageCode()).orElse(null);
-                    if (translation != null) {
-                        translation.setStatus("FAILED");
-                        translationRepo.save(translation);
-                    }
-                    failTask(task, "Dịch thuật thất bại: " + safeMessage(error));
-                    return null;
-                }
-                try {
-                    ProviderRetry.pause(attempt);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    failTask(task, "Dịch thuật bị gián đoạn. Có thể thử lại sau.");
-                    return null;
-                }
-            }
-        }
-        return null;
+    private String safeMessage(Exception error) {
+        return error.getMessage() == null || error.getMessage().isBlank() ? error.getClass().getSimpleName() : error.getMessage();
     }
 
     // Dịch theo source language của POI và giữ nguyên protected terms.
     private String translateRealApiWithProtectedTerms(String sourceText, String sourceLang,
-            String targetLang, List<ProtectedTerm> terms) throws Exception {
+            String targetLang, List<String> terms) throws Exception {
         if (sourceLang.equalsIgnoreCase(targetLang)) {
             return sourceText;
         }
@@ -272,11 +108,11 @@ public class PipelineService {
         String maskedText = sourceText;
         Map<String, String> tokenMap = new LinkedHashMap<>();
         int idx = 0;
-        for (ProtectedTerm pt : terms) {
-            if (pt.getTerm() != null && !pt.getTerm().isBlank() && maskedText.contains(pt.getTerm())) {
+        for (String term : terms) {
+            if (term != null && !term.isBlank() && maskedText.contains(term)) {
                 String token = "PTERM" + idx + "X";
-                tokenMap.put(token, pt.getTerm());
-                maskedText = maskedText.replace(pt.getTerm(), token);
+                tokenMap.put(token, term);
+                maskedText = maskedText.replace(term, token);
                 idx++;
             }
         }
@@ -340,33 +176,4 @@ public class PipelineService {
         return translated;
     }
 
-    private void failTask(PipelineTask task, String errorMsg) {
-        task.setStatus("FAILED");
-        task.setErrorMessage(errorMsg);
-        task.setFinishedAt(LocalDateTime.now());
-        pipelineTaskRepo.save(task);
-        log("pipeline", "ERROR", errorMsg);
-    }
-
-    private String safeMessage(Exception error) {
-        String message = error.getMessage();
-        return message == null || message.isBlank() ? error.getClass().getSimpleName() : message;
-    }
-
-    private void log(String component, String severity, String message) {
-        systemLogRepo.save(SystemLog.builder()
-                .component(component)
-                .severity(severity)
-                .message(message)
-                .build());
-    }
-
-    private String sha256(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(md.digest(input.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            return String.valueOf(input.hashCode());
-        }
-    }
 }
