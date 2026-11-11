@@ -2,10 +2,12 @@
 .github
 target
 .env
+.env.*
 README.md
 voiceover-frontend
 voiceover-backend-git
 .venv-edge-tts
+__pycache__
 storage
 docs
 *.log
