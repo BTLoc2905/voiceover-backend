@@ -31,7 +31,7 @@ public class PoiService {
             throw new IllegalArgumentException("Vị trí hoặc bán kính tìm kiếm không hợp lệ.");
         List<Map<String, Object>> result = new ArrayList<>();
         for (Poi poi : poiRepo.findByStatus("PUBLISHED")) {
-            if (!RouteSessionService.hasValidCoordinates(poi)) continue;
+            if (!RouteService.hasValidCoordinates(poi)) continue;
             double distance = calculateHaversineMeters(userLat, userLng, poi.getLatitude().doubleValue(), poi.getLongitude().doubleValue());
             if (distance > maxRadiusMeters) continue;
             Map<String, Object> item = new LinkedHashMap<>();
@@ -99,10 +99,10 @@ public class PoiService {
             target = poiRepo.findForUpdate(request.getId()).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
             if (request.getContentRevision() != target.getContentRevision())
                 throw new ContentReviewConflictException("Mô tả nguồn đã thay đổi. Tải lại POI trước khi lưu; nội dung đang soạn chưa bị ghi đè.");
-            if (!RouteSessionService.published(request.getStatus()) || !RouteSessionService.hasValidCoordinates(request)) rejectServingRoutes(request.getId());
+            if (!RouteService.published(request.getStatus()) || !RouteService.hasValidCoordinates(request)) rejectServingRoutes(request.getId());
         }
         validatePoi(request);
-        if (RouteSessionService.published(request.getStatus())) reviewService.requireDefaultAudioForPublication(request, target);
+        if (RouteService.published(request.getStatus())) reviewService.requireDefaultAudioForPublication(request, target);
         target.setName(request.getName().strip()); target.setDescriptionSource(request.getDescriptionSource().strip());
         target.setSourceLanguageCode(request.getSourceLanguageCode()); target.setStatus(request.getStatus().toUpperCase(Locale.ROOT));
         target.setLatitude(request.getLatitude()); target.setLongitude(request.getLongitude()); target.setRadiusM(request.getRadiusM());
@@ -149,7 +149,7 @@ public class PoiService {
             throw new IllegalArgumentException("Ngôn ngữ gốc không tồn tại hoặc đã ngừng hoạt động.");
     }
 
-    // UC06 & Quy tắc F-05: Chặn xóa POI nếu đang nằm trong Route/Session đã xuất bản
+    // UC06 & Quy tắc F-05: Chặn xóa POI nếu đang nằm trong Route đã xuất bản
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void deletePoiSafely(Long poiId) {
         poiRepo.findForUpdate(poiId).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));

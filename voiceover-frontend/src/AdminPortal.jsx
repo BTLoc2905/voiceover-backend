@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./AdminPortal.css";
-import SessionRoutes from "./SessionRoutes.jsx";
+import RouteManagement from "./RouteManagement.jsx";
 import TranslationReview from "./TranslationReview.jsx";
 import { languageLabel } from "./languageDisplay.js";
-import "./AiDescription.css";
 import "./AdminVisual.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -175,9 +174,6 @@ function PoiManagement() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [saveWarning, setSaveWarning] = useState("");
-  const [aiDraft, setAiDraft] = useState(null);
-  const [aiNotes, setAiNotes] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
   const load = () => api("/api/admin/pois").then(setPois).catch((reason) => setMessage(reason.message));
   useEffect(() => {
     load();
@@ -188,16 +184,6 @@ function PoiManagement() {
         : { ...current, sourceLanguageCode: items[0]?.code || "" });
     }).catch((reason) => setMessage(`Không tải được danh mục ngôn ngữ: ${reason.message}`));
   }, []);
-  useEffect(() => {
-    if (!form.id) return;
-    let current = true;
-    api(`/api/admin/pois/${form.id}/ai-description/latest`).then((draft) => {
-      if (current && draft.status !== "NONE") setAiDraft(draft);
-    }).catch((reason) => {
-      if (current) setMessage(`Không tải được bản nháp AI: ${reason.message}`);
-    });
-    return () => { current = false; };
-  }, [form.id]);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const save = async (event) => {
     event.preventDefault();
@@ -262,70 +248,24 @@ function PoiManagement() {
       if (form.id === poi.id) {
         setForm(empty);
         setThumbnailFile(null);
-        setAiDraft(null);
-        setAiNotes("");
       }
       setMessage("Đã xóa POI.");
       load();
     } catch (reason) { setMessage(reason.message); }
   };
-  const generateDraft = async () => {
-    if (!form.id) { setMessage("Hãy lưu POI trước, sau đó chọn Sửa để tạo gợi ý AI."); return; }
-    setAiBusy(true); setMessage("");
-    try {
-      const result = await api(`/api/admin/pois/${form.id}/ai-description`, { method: "POST", body: JSON.stringify({ notes: aiNotes }) });
-      setAiDraft(result);
-      setMessage(result.status === "DRAFT" ? "Gemini đã tạo bản nháp. Hãy kiểm tra trước khi áp dụng." : result.errorMessage || "Không tạo được gợi ý.");
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
-  const saveDraft = async () => {
-    if (!aiDraft?.id) return;
-    setAiBusy(true);
-    try {
-      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}`, { method: "PUT", body: JSON.stringify({ content: aiDraft.content }) });
-      setAiDraft(result); setMessage("Đã lưu chỉnh sửa bản nháp.");
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
-  const acceptDraft = async () => {
-    if (!aiDraft?.id) return;
-    setAiBusy(true);
-    try {
-      const savedDraft = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}`, { method: "PUT", body: JSON.stringify({ content: aiDraft.content }) });
-      setAiDraft(savedDraft);
-      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}/accept`, { method: "POST" });
-      setForm((current) => ({ ...current, descriptionSource: result.content, contentRevision: result.contentRevision }));
-      setAiDraft(result); setMessage("Đã áp dụng mô tả và kích hoạt pipeline nội dung."); load();
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
-  const discardDraft = async () => {
-    if (!aiDraft?.id) return;
-    setAiBusy(true);
-    try {
-      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}/discard`, { method: "POST" });
-      setAiDraft(result); setMessage("Đã bỏ bản nháp; mô tả POI không thay đổi.");
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
   const edit = (poi) => {
     setForm({ ...poi, latitude: String(poi.latitude), longitude: String(poi.longitude), radiusM: String(poi.radiusM) });
     setThumbnailFile(null);
-    setAiDraft(null);
-    setAiNotes("");
     setMessage("");
     setSaveWarning("");
   };
   const resetForm = () => {
     setForm({ ...empty, sourceLanguageCode: languages.find((item) => item.code === "vi")?.code || languages[0]?.code || "" });
     setThumbnailFile(null);
-    setAiDraft(null);
-    setAiNotes("");
     setMessage("");
     setSaveWarning("");
   };
-  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5 · UC07</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className={`alert${aiDraft?.status === "FAILED" ? " error" : ""}`}>{message}</div>}{saveWarning && <div className="alert error" role="alert">{saveWarning}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}>
+  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className="alert">{message}</div>}{saveWarning && <div className="alert error" role="alert">{saveWarning}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}>
     <label>Tên POI<input value={form.name} onChange={(event) => update("name", event.target.value)} maxLength="255" required /></label>
     <label>Vị trí trên bản đồ <small className="muted">Nhấn vào bản đồ để chọn hoặc kéo vị trí bằng cách cập nhật tọa độ.</small></label>
     <PoiLocationPicker key={form.id || "new-poi"} latitude={form.latitude} longitude={form.longitude} radiusM={form.radiusM} onChange={(latitude, longitude) => { update("latitude", String(latitude)); update("longitude", String(longitude)); }} />
@@ -335,16 +275,16 @@ function PoiManagement() {
     <label>Ảnh thumbnail <small className="muted">PNG/JPEG, tối đa 5 MB. Ảnh tải lên được lưu trong kho cục bộ của backend.</small><input type="file" accept="image/png,image/jpeg" onChange={(event) => setThumbnailFile(event.target.files?.[0] || null)} />{thumbnailFile && <small>{thumbnailFile.name} — sẽ tải lên khi lưu POI</small>}{form.thumbnailUrl && !thumbnailFile && <img className="poi-thumbnail-preview" src={form.thumbnailUrl} alt={`Thumbnail ${form.name}`} />}</label>
     <label>Mô tả gốc<textarea rows="5" value={form.descriptionSource} onChange={(event) => update("descriptionSource", event.target.value)} required /></label>
     <div className="form-actions"><button className="primary" type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu POI"}</button><button className="secondary" type="button" onClick={resetForm}>Tạo mới / hủy</button></div></form>
-      <div className="ai-draft-panel"><h3>UC07 · Gợi ý mô tả bằng Gemini</h3><p className="muted">AI chỉ tạo bản nháp. Kiểm tra nội dung trước khi chấp nhận; mô tả POI hiện tại không bị đổi nếu bạn bỏ bản nháp.</p><label>Ghi chú dữ kiện đã kiểm chứng<textarea rows="3" maxLength="4000" value={aiNotes} onChange={(event) => setAiNotes(event.target.value)} placeholder="Ví dụ: thông tin lịch sử đã xác nhận, điểm đặc biệt cần nhắc đến" /></label><button className="secondary" type="button" disabled={aiBusy || !form.id} onClick={generateDraft}>{aiBusy ? "Đang xử lý…" : aiDraft?.status === "DRAFT" ? "Tạo lại gợi ý" : "Tạo gợi ý bằng Gemini"}</button>{!form.id && <small className="muted">Lưu POI trước để tạo và lưu bản nháp.</small>}{aiDraft && <div className="ai-draft-result"><div className="form-actions"><b>Trạng thái: {aiDraft.status}</b><small>{aiDraft.provider} · {aiDraft.model}</small></div>{aiDraft.errorMessage && <div className="alert error">{aiDraft.errorMessage}</div>}{aiDraft.content && <><textarea aria-label="Nội dung bản nháp AI" rows="10" value={aiDraft.content} disabled={aiDraft.status !== "DRAFT" || aiBusy} onChange={(event) => setAiDraft((draft) => ({ ...draft, content: event.target.value }))} /><div className="form-actions"><button className="secondary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={saveDraft}>Lưu sửa bản nháp</button><button className="primary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={acceptDraft}>Chấp nhận và áp dụng</button><button className="danger-text" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={discardDraft}>Bỏ bản nháp</button></div></>}</div>}</div>
     </article>    <article className="panel"><h2>Danh sách POI <span className="count">{pois.length}</span></h2><div className="table-list">{pois.map((poi) => <div className="poi-row" key={poi.id}><div><b>{poi.name}</b><small>{poi.latitude}, {poi.longitude} · bán kính {poi.radiusM}m</small></div><div className="row-actions"><span className={`status ${String(poi.status).toLowerCase()}`}>{poi.status}</span><button type="button" className="poi-edit-button" aria-label={`Sửa ${poi.name}`} onClick={() => edit(poi)}>Sửa</button><button type="button" className="poi-delete-button" aria-label={`Xóa ${poi.name}`} onClick={() => remove(poi)}>Xóa</button></div></div>)}{!pois.length && <p className="muted">Chưa có dữ liệu POI.</p>}</div></article></div></section>;
 }
 
 export default function AdminPortal() {
   const [account, setAccount] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const resolvePage = () => window.location.pathname === "/poimanagement" ? "pois" : window.location.pathname.startsWith("/admin/sessions") ? "sessions" : window.location.pathname.startsWith("/admin/translations") ? "translations" : "dashboard";
+  const resolvePage = () => window.location.pathname === "/poimanagement" ? "pois" : window.location.pathname.startsWith("/admin/routes") ? "routes" : window.location.pathname.startsWith("/admin/translations") ? "translations" : "dashboard";
   const [page, setPage] = useState(resolvePage);
   const [reviewDirty, setReviewDirty] = useState(false);
+  const [routeDirty, setRouteDirty] = useState(false);
   useEffect(() => {
     let active = true;
     const expired = () => setAccount(null);
@@ -356,6 +296,9 @@ export default function AdminPortal() {
   useEffect(() => {
     const handleBack = () => {
       const next = resolvePage();
+      if (page === "routes" && routeDirty && next !== "routes" && !window.confirm("Lộ trình có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) {
+        window.history.pushState({}, "", "/admin/routes"); return;
+      }
       if (page === "translations" && reviewDirty && next !== "translations" && !window.confirm("Bản dịch có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) {
         window.history.pushState({}, "", "/admin/translations"); return;
       }
@@ -363,13 +306,14 @@ export default function AdminPortal() {
     };
     window.addEventListener("popstate", handleBack);
     return () => window.removeEventListener("popstate", handleBack);
-  }, [page, reviewDirty]);
+  }, [page, reviewDirty, routeDirty]);
   const navigateAdmin = (path, nextPage) => {
+    if (page === "routes" && routeDirty && nextPage !== page && !window.confirm("Lộ trình có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) return;
     if (page === "translations" && reviewDirty && nextPage !== page && !window.confirm("Bản dịch có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) return;
     window.history.pushState({}, "", path);
     setPage(nextPage);
   };
   if (authLoading) return <main className="admin-login"><p role="status">Đang kiểm tra phiên quản trị…</p></main>;
   if (!account) return <Login onLogin={setAccount} />;
-  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "sessions" ? "active" : ""} onClick={() => navigateAdmin("/admin/sessions", "sessions")}>◎ <span>Sessions & Routes</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if (reviewDirty && !window.confirm("Bản dịch có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; void api("/api/admin/auth/logout", { method: "POST" }).then(() => setAccount(null)).catch((reason) => window.alert(reason.message)); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "sessions" ? "Sessions & Routes" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span>VoiceMap Admin</span></header>{page === "dashboard" ? <Dashboard /> : page === "sessions" ? <SessionRoutes /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
+  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "routes" ? "active" : ""} onClick={() => navigateAdmin("/admin/routes", "routes")}>◎ <span>Quản lý lộ trình</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if ((reviewDirty || routeDirty) && !window.confirm("Có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; void api("/api/admin/auth/logout", { method: "POST" }).then(() => setAccount(null)).catch((reason) => window.alert(reason.message)); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "routes" ? "Quản lý lộ trình" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span>VoiceMap Admin</span></header>{page === "dashboard" ? <Dashboard /> : page === "routes" ? <RouteManagement onDirtyChange={setRouteDirty} /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
 }

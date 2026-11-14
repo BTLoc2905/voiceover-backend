@@ -30,15 +30,49 @@ class PoiRouteProtectionTest {
         for (String status : List.of("DRAFT", "HIDDEN")) assertThrows(RouteConflictException.class, () -> service.saveOrUpdatePoi(poi(status)));
         Poi invalid = poi("PUBLISHED"); invalid.setLatitude(null);
         assertThrows(RouteConflictException.class, () -> service.saveOrUpdatePoi(invalid));
-        verify(pois, never()).save(any()); verify(pois, never()).deleteById(any()); verifyNoInteractions(pipeline);
+        verify(pois, never()).saveAndFlush(any()); verify(pois, never()).deleteById(any()); verifyNoInteractions(pipeline);
     }
-    @Test void closedSessionAllowsPoiDraftButReferencedPoiDeletionHasClearConflict() {
+    @Test void unservedPoiCanBecomeDraftButReferencedPoiDeletionHasClearConflict() {
         when(stops.findServingRoutes(1L)).thenReturn(List.of());
         Poi draft = poi("DRAFT"); when(pois.saveAndFlush(draft)).thenReturn(draft);
         assertEquals("DRAFT", service.saveOrUpdatePoi(draft).getStatus());
         when(stops.findReferencingRoutes(1L)).thenReturn(List.of(Route.builder().id(9L).name("Bản nháp còn tham chiếu").build()));
         assertTrue(assertThrows(RouteConflictException.class, () -> service.deletePoiSafely(1L)).getMessage().contains("Bản nháp còn tham chiếu"));
         verify(pois, never()).deleteById(any());
+    }
+
+    @Test void draftPublishedHiddenPublishedPreservesPoiAndNormalizesStatus() {
+        Poi current = poi("DRAFT");
+        when(pois.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
+
+        for (String status : List.of("DRAFT", "published", "hidden", "published")) {
+            Poi request = Poi.builder().id(current.getId()).name(current.getName())
+                    .descriptionSource(current.getDescriptionSource()).sourceLanguageCode("vi")
+                    .latitude(current.getLatitude()).longitude(current.getLongitude()).radiusM(50)
+                    .status(status).build();
+            Poi saved = service.saveOrUpdatePoi(request);
+            assertSame(current, saved);
+            assertEquals(status.toUpperCase(Locale.ROOT), saved.getStatus());
+            assertEquals(1L, saved.getId());
+            assertEquals("Mô tả", saved.getDescriptionSource());
+        }
+
+        verify(pois, times(4)).saveAndFlush(current);
+        verify(pipeline, times(2)).requireDefaultAudioForPublication(any(), eq(current));
+    }
+
+    @Test void publishedRouteBlocksHidingWithoutChangingStoredPoi() {
+        Poi current = poi("PUBLISHED");
+        when(stops.findServingRoutes(1L)).thenReturn(List.of(
+                Route.builder().id(7L).name("Published route").status("PUBLISHED").build()));
+        Poi request = Poi.builder().id(1L).status("HIDDEN")
+                .latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).build();
+
+        assertThrows(RouteConflictException.class, () -> service.saveOrUpdatePoi(request));
+
+        assertEquals("PUBLISHED", current.getStatus());
+        verify(pois, never()).saveAndFlush(any());
+        verifyNoInteractions(pipeline);
     }
     @Test void publicGuideRejectsDraftAndHiddenBeforeLoadingOrGeneratingNarration() {
         for (String status : List.of("DRAFT", "HIDDEN")) {

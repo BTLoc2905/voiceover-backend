@@ -3,7 +3,6 @@ package com.voiceover.backend.services;
 import com.voiceover.backend.entities.Poi;
 import com.voiceover.backend.entities.Route;
 import com.voiceover.backend.entities.RouteStop;
-import com.voiceover.backend.entities.Session;
 import com.voiceover.backend.repositories.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,17 +16,16 @@ import java.util.stream.LongStream;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class RouteSessionServiceTest {
+class RouteServiceTest {
     private final PoiRepository pois = mock(PoiRepository.class);
     private final RouteRepository routes = mock(RouteRepository.class);
     private final RouteStopRepository stops = mock(RouteStopRepository.class);
-    private final SessionRepository sessions = mock(SessionRepository.class);
     private final WalkingDirectionsService directions = mock(WalkingDirectionsService.class);
-    private RouteSessionService service;
+    private RouteService service;
 
     @BeforeEach
     void setUp() {
-        service = new RouteSessionService(sessions, routes, stops, pois, directions,
+        service = new RouteService(routes, stops, pois, directions,
                 mock(AudioRepository.class), mock(TranslationRepository.class), mock(LanguageRepository.class));
     }
 
@@ -95,12 +93,10 @@ class RouteSessionServiceTest {
     }
 
     @Test
-    void suggestedRoutesRequirePublishedSessionAndUsableOrderedStops() {
-        Route available = Route.builder().id(10L).sessionId(20L).name("Tour").status("PUBLISHED").build();
-        Route hiddenSession = Route.builder().id(11L).sessionId(21L).name("Draft session").status("PUBLISHED").build();
-        when(routes.findByStatus("PUBLISHED")).thenReturn(List.of(available, hiddenSession));
-        when(sessions.findById(20L)).thenReturn(Optional.of(Session.builder().id(20L).status("PUBLISHED").build()));
-        when(sessions.findById(21L)).thenReturn(Optional.of(Session.builder().id(21L).status("DRAFT").build()));
+    void suggestedRoutesRequireOnlyPublishedRouteAndUsableOrderedStops() {
+        Route available = Route.builder().id(10L).name("Tour").status("PUBLISHED").build();
+        Route invalidRoute = Route.builder().id(11L).name("Incomplete route").status("PUBLISHED").build();
+        when(routes.findByStatus("PUBLISHED")).thenReturn(List.of(available, invalidRoute));
         when(stops.findByRouteIdOrderByStopOrderAsc(10L)).thenReturn(List.of(
                 RouteStop.builder().poiId(2L).stopOrder(1).build(), RouteStop.builder().poiId(1L).stopOrder(2).build()));
         Poi a = poi(1), b = poi(2);
@@ -114,42 +110,15 @@ class RouteSessionServiceTest {
     }
 
     @Test
-    void deletingRouteRemovesStopsBeforeRouteAndChecksOwnership() {
-        Session draft = Session.builder().id(3L).status("DRAFT").build();
-        Route route = Route.builder().id(8L).sessionId(3L).status("PUBLISHED").build();
-        when(sessions.findForUpdate(3L)).thenReturn(Optional.of(draft));
-        when(routes.findById(8L)).thenReturn(Optional.of(route));
-        service.deleteRoute(3L, 8L);
+    void deletingRouteRemovesOnlyItsStopsAndRoute() {
+        Route route = Route.builder().id(8L).status("PUBLISHED").build();
+        when(routes.findForUpdate(8L)).thenReturn(Optional.of(route));
+        service.deleteRoute(8L);
         var order = inOrder(stops, routes);
         order.verify(stops).deleteByRouteId(8L);
         order.verify(stops).flush();
         order.verify(routes).delete(route);
-
-        route.setSessionId(4L);
-        assertThrows(IllegalArgumentException.class, () -> service.deleteRoute(3L, 8L));
-        draft.setStatus("PUBLISHED");
-        assertThrows(com.voiceover.backend.services.RouteConflictException.class, () -> service.deleteRoute(3L, 8L));
-    }
-
-    @Test
-    void deletingDraftSessionClearsChildRoutesButPublishedSessionIsProtected() {
-        Session draft = Session.builder().id(3L).status("DRAFT").build();
-        Route first = Route.builder().id(8L).sessionId(3L).build();
-        Route second = Route.builder().id(9L).sessionId(3L).build();
-        when(sessions.findForUpdate(3L)).thenReturn(Optional.of(draft));
-        when(routes.findBySessionId(3L)).thenReturn(List.of(first, second));
-        service.deleteSession(3L);
-        var order = inOrder(stops, routes, sessions);
-        order.verify(stops).deleteByRouteId(8L);
-        order.verify(stops).flush();
-        order.verify(routes).delete(first);
-        order.verify(stops).deleteByRouteId(9L);
-        order.verify(stops).flush();
-        order.verify(routes).delete(second);
-        order.verify(routes).flush();
-        order.verify(sessions).delete(draft);
-
-        draft.setStatus("PUBLISHED");
-        assertThrows(com.voiceover.backend.services.RouteConflictException.class, () -> service.deleteSession(3L));
+        verifyNoInteractions(pois);
+        assertThrows(IllegalArgumentException.class, () -> service.deleteRoute(99L));
     }
 }

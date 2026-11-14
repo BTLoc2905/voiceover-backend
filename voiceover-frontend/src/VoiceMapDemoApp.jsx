@@ -112,7 +112,7 @@ export default function VoiceMapDemoApp() {
 
   // State Admin (UC05 - UC11)
   const [adminLoggedIn, setAdminLoggedIn] = useState(true);
-  const [newPoiForm, setNewPoiForm] = useState({ name: "", notes: "", lat: 10.7785, lng: 106.6975, radiusM: 50, descriptionSource: "", status: "PUBLISHED" });
+  const [newPoiForm, setNewPoiForm] = useState({ name: "", lat: 10.7785, lng: 106.6975, radiusM: 50, descriptionSource: "", status: "PUBLISHED" });
   const [editingPoiId, setEditingPoiId] = useState(1);
   const [editingLang, setEditingLang] = useState("en");
   const [manualTranslationText, setManualTranslationText] = useState("");
@@ -190,18 +190,6 @@ export default function VoiceMapDemoApp() {
     }
   };
 
-  // UC07: Gợi ý mô tả gốc bằng AI
-  const handleAiSuggest = () => {
-    if (!newPoiForm.name.trim()) {
-      alert("Vui lòng nhập tên POI trước khi gọi AI gợi ý (UC07)!");
-      return;
-    }
-    const draft = `${newPoiForm.name} là địa danh lịch sử - văn hóa đặc sắc tại TP.HCM. ${
-      newPoiForm.notes ? "Điểm nhấn: " + newPoiForm.notes + ". " : ""
-    }Du khách đến đây sẽ được trải nghiệm không gian kiến trúc ấn tượng cùng câu chuyện lịch sử lâu đời.`;
-    setNewPoiForm({ ...newPoiForm, descriptionSource: draft });
-  };
-
   // UC06 & UC08: Lưu POI mới và tự động chạy Pipeline 15+ ngôn ngữ có bảo vệ thuật ngữ
   const handleSaveNewPoi = () => {
     if (!newPoiForm.name || !newPoiForm.descriptionSource) {
@@ -224,7 +212,7 @@ export default function VoiceMapDemoApp() {
       translations: generatedTranslations,
     };
     setPois([...pois, created]);
-    setNewPoiForm({ name: "", notes: "", lat: 10.7785, lng: 106.6975, radiusM: 50, descriptionSource: "", status: "PUBLISHED" });
+    setNewPoiForm({ name: "", lat: 10.7785, lng: 106.6975, radiusM: 50, descriptionSource: "", status: "PUBLISHED" });
     alert("Đã lưu POI và tự động chạy Pipeline dịch thuật + tạo Audio cho 16 ngôn ngữ (UC08)!");
   };
 
@@ -549,10 +537,10 @@ export default function VoiceMapDemoApp() {
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* UC06, UC07, UC08: Quản lý POI & Gợi ý mô tả bằng AI */}
+            {/* Quản lý POI và nhập mô tả thủ công */}
             <section className="lg:col-span-6 bg-white rounded-xl shadow p-5 border border-slate-200 space-y-3">
               <h2 className="text-lg font-bold text-[#2a2f8a]">
-                ➕ Tạo mới POI & Gợi ý Mô tả bằng AI (UC06, UC07, UC08)
+                ➕ Tạo mới POI và nhập mô tả thủ công
               </h2>
               <input
                 type="text"
@@ -561,27 +549,14 @@ export default function VoiceMapDemoApp() {
                 onChange={(e) => setNewPoiForm({ ...newPoiForm, name: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 text-sm"
               />
-              <input
-                type="text"
-                placeholder="Ghi chú ngắn cho AI (tùy chọn, VD: kiến trúc Pháp thế kỷ 19)"
-                value={newPoiForm.notes}
-                onChange={(e) => setNewPoiForm({ ...newPoiForm, notes: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              />
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-500">
                   Từ khóa bảo vệ (protected_terms): {PROTECTED_TERMS.join(", ")}
                 </span>
-                <button
-                  onClick={handleAiSuggest}
-                  className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-700"
-                >
-                  ✨ Gợi ý bằng AI (≤15s - UC07)
-                </button>
               </div>
               <textarea
                 rows={3}
-                placeholder="Mô tả gốc của POI (Bản nháp AI sẽ hiển thị tại đây để kiểm tra trước khi Lưu)..."
+                placeholder="Nhập mô tả gốc của POI..."
                 value={newPoiForm.descriptionSource}
                 onChange={(e) => setNewPoiForm({ ...newPoiForm, descriptionSource: e.target.value })}
                 className="w-full border rounded-lg p-3 text-sm"

@@ -13,8 +13,7 @@ class PlaybackEventControllerTest {
     final LanguageRepository languages = mock(LanguageRepository.class);
     final UsageEventRepository events = mock(UsageEventRepository.class);
     final RouteRepository routes = mock(RouteRepository.class);
-    final SessionRepository sessions = mock(SessionRepository.class);
-    final PlaybackEventController controller = new PlaybackEventController(pois, languages, events, routes, sessions);
+    final PlaybackEventController controller = new PlaybackEventController(pois, languages, events, routes);
     @Test void recordsActualStartOncePerPlaybackAndCompletionSeparately() {
         when(pois.findById(1L)).thenReturn(Optional.of(Poi.builder().id(1L).status("PUBLISHED").build()));
         when(languages.findById("vi")).thenReturn(Optional.of(Language.builder().code("vi").isActive(true).build()));
@@ -54,7 +53,7 @@ class PlaybackEventControllerTest {
     @Test void databaseDeduplicatesAnEventAfterBackendRestart() {
         when(events.existsByAnonClientIdAndPlaybackIdAndEventType("guest", "visit-1", "APP_OPEN")).thenReturn(true);
         var input = new PlaybackEventController.Input(null, null, null, "APP_OPEN", "guest", "visit-1");
-        assertFalse(new PlaybackEventController(pois, languages, events, routes, sessions).record(input).get("recorded"));
+        assertFalse(new PlaybackEventController(pois, languages, events, routes).record(input).get("recorded"));
         verify(events, never()).saveAndFlush(any());
     }
     @Test void concurrentDuplicateWriteDoesNotCountTwice() {
@@ -79,12 +78,12 @@ class PlaybackEventControllerTest {
         verify(events, times(1)).saveAndFlush(any());
     }
 
-    @Test void routeSelectionRequiresPublishedRouteAndSession() {
+    @Test void routeSelectionRequiresPublishedRouteWithoutTourSession() {
         var input = new PlaybackEventController.Input(null, 7L, null, "ROUTE_SELECTED", "guest", "start-1");
         assertThrows(IllegalArgumentException.class, () -> controller.record(input));
-        when(routes.findById(7L)).thenReturn(Optional.of(Route.builder().id(7L).sessionId(3L).status("PUBLISHED").build()));
+        when(routes.findById(7L)).thenReturn(Optional.of(Route.builder().id(7L).status("DRAFT").build()));
         assertThrows(IllegalArgumentException.class, () -> controller.record(input));
-        when(sessions.findById(3L)).thenReturn(Optional.of(Session.builder().id(3L).status("PUBLISHED").build()));
+        when(routes.findById(7L)).thenReturn(Optional.of(Route.builder().id(7L).status("PUBLISHED").build()));
         assertTrue(controller.record(input).get("recorded"));
         assertFalse(controller.record(input).get("recorded"));
         var saved = org.mockito.ArgumentCaptor.forClass(UsageEvent.class);

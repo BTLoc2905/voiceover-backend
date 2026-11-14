@@ -89,6 +89,25 @@ class PoiManagementValidationTest {
         assertEquals(2, current.getContentRevision());
     }
 
+    @Test void manualDescriptionEditPreservesPoiIdentityAndEnqueuesContentPipeline() {
+        Poi current = validPoi(); current.setId(1L); current.setContentRevision(2); current.setStatus("DRAFT");
+        when(pois.findForUpdate(1L)).thenReturn(Optional.of(current));
+        when(languages.findById("vi")).thenReturn(Optional.of(Language.builder().code("vi").isActive(true).build()));
+        when(pois.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
+        Poi edited = validPoi(); edited.setId(1L); edited.setContentRevision(2);
+        edited.setDescriptionSource("  Mô tả do quản trị viên chỉnh sửa thủ công.  ");
+
+        Poi saved = service.saveOrUpdatePoi(edited);
+
+        assertSame(current, saved);
+        assertEquals(1L, saved.getId());
+        assertEquals("Mô tả do quản trị viên chỉnh sửa thủ công.", saved.getDescriptionSource());
+        var order = inOrder(pois, pipeline);
+        order.verify(pois).saveAndFlush(current);
+        order.verify(pipeline).enqueueSource(current);
+        verify(pipeline, never()).requireDefaultAudioForPublication(any(), any());
+    }
+
     @Test void nearbyReadFiltersRadiusAndNeverSavesOrEnqueues() {
         Poi near = validPoi(); near.setId(1L); near.setLatitude(BigDecimal.ZERO); near.setLongitude(BigDecimal.valueOf(0.00449)); near.setStatus("PUBLISHED");
         Poi far = validPoi(); far.setId(2L); far.setLatitude(BigDecimal.ZERO); far.setLongitude(BigDecimal.valueOf(0.00451)); far.setStatus("PUBLISHED");
