@@ -113,5 +113,16 @@
   "stopNavigation": "停止导航·返回列表",
   "requestFailed": "无法加载数据。请再试一次。",
   "narrationFailed": "无法加载旁白。请再试一次。",
-  "locationUnavailable": "您的位置不可用。您仍然可以在地图上选择一个地点。"
+  "locationUnavailable": "您的位置不可用。您仍然可以在地图上选择一个地点。",
+  "tapToPlay": "点击收听",
+  "audioUnavailable": "音频暂不可用，您仍可阅读解说文本。",
+  "fallbackAudio": "所选语言音频不可用，正在使用备用音频。",
+  "skipped": "已跳过",
+  "notVisited": "未参观",
+  "journeyCompleted": "行程已结束",
+  "progressNotSaved": "无法在此设备保存进度，仅在本次访问期间保留。",
+  "gpsDenied": "位置权限被拒绝，仍可在地图上选择地点。请在浏览器设置中允许位置权限后重试。",
+  "gpsWeak": "GPS信号较弱，位置仅供参考，已暂停自动解说。",
+  "descriptionFallback": "正在显示原始描述",
+  "mapUnavailable": "无法加载地图，请检查网络连接。"
 }

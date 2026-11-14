@@ -113,5 +113,16 @@
   "stopNavigation": "Hentikan navigasi · kembali ke daftar",
   "requestFailed": "Tidak dapat memuat data. Silakan coba lagi.",
   "narrationFailed": "Tidak dapat memuat narasi. Silakan coba lagi.",
-  "locationUnavailable": "Lokasi Anda tidak tersedia. Anda masih dapat memilih tempat di peta."
+  "locationUnavailable": "Lokasi Anda tidak tersedia. Anda masih dapat memilih tempat di peta.",
+  "tapToPlay": "Ketuk untuk mendengarkan",
+  "audioUnavailable": "Audio tidak tersedia. Anda masih dapat membaca narasi.",
+  "fallbackAudio": "Audio bahasa pilihan tidak tersedia. Menggunakan audio cadangan",
+  "skipped": "Dilewati",
+  "notVisited": "Belum dikunjungi",
+  "journeyCompleted": "Perjalanan selesai",
+  "progressNotSaved": "Progres tidak dapat disimpan di perangkat ini. Hanya tersedia untuk kunjungan ini.",
+  "gpsDenied": "Akses lokasi ditolak. Anda tetap dapat memilih tempat di peta. Aktifkan izin lokasi di browser lalu coba lagi.",
+  "gpsWeak": "Sinyal GPS lemah. Lokasi perkiraan; narasi otomatis dijeda.",
+  "descriptionFallback": "Menampilkan deskripsi asli",
+  "mapUnavailable": "Peta tidak dapat dimuat. Periksa koneksi jaringan."
 }

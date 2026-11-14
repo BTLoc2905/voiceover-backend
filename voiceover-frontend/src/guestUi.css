@@ -3,3 +3,15 @@
 .route-topbar .language-picker { pointer-events: auto; }
 .route-topbar .language-chip { max-width: 118px; }
 .journey-language-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.guest-poi-card { width: min(245px, calc(100vw - 100px)); overflow-wrap: anywhere; }
+.guest-poi-card + .guest-poi-card { margin-top: 12px; padding-top: 12px; border-top: 1px solid #cbd5e1; }
+.guest-poi-card h3 { margin: 8px 0; font-size: 16px; line-height: 1.3; }
+.guest-poi-card img { width: 100%; max-height: 130px; object-fit: cover; border-radius: 8px; }
+.guest-poi-card .guest-poi-description { max-height: 110px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+.guest-poi-card small { display: block; color: #64748b; margin: 6px 0; }
+.guest-poi-card button { min-height: 44px; width: 100%; }
+.leaflet-marker-icon.guest-poi-marker.nearby, .poi-map-group-marker.nearby { filter: drop-shadow(0 0 5px #f97316) drop-shadow(0 0 2px #fff); }
+.map-art .leaflet-popup-content { max-height: 55vh; overflow-y: auto; }
+.map-tile-error { position: absolute; bottom: 22px; left: 10px; right: 10px; z-index: 450; margin: 0; padding: 8px; border-radius: 8px; background: #fff7ed; color: #9a3412; pointer-events: none; }
+.nearby-sheet .api-state button { min-height: 44px; padding: 8px 12px; margin-left: 8px; }
+.route-planner .route-drag-handle, .route-planner .route-more-button { min-width: 44px; min-height: 44px; }

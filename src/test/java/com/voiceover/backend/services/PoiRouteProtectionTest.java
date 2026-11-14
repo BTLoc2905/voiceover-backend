@@ -16,7 +16,7 @@ class PoiRouteProtectionTest {
     final TranslationReviewService pipeline = mock(TranslationReviewService.class);
     final LanguageRepository languages = mock(LanguageRepository.class);
     final PoiService service = new PoiService(pois, translations, audios,
-            languages, stops, pipeline, mock(PoiThumbnailService.class));
+            languages, stops, pipeline, mock(PoiThumbnailService.class), mock(AudioGenerationService.class));
     Poi poi(String status) {
         Poi poi = Poi.builder().id(1L).name("POI").descriptionSource("Mô tả").sourceLanguageCode("vi").status(status).latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).build();
         when(languages.findById("vi")).thenReturn(Optional.of(Language.builder().code("vi").isActive(true).build()));

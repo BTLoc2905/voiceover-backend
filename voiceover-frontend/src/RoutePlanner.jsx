@@ -14,6 +14,7 @@ import LanguagePicker from "./LanguagePicker.jsx";
 import SortableRouteStop from "./SortableRouteStop.jsx";
 import { guestText } from "./guestUi.js";
 import { recordRouteSelection } from "./narrationApi.js";
+import { reliableJourneyFix } from "./routeJourney.js";
 import "./RoutePlanner.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -132,6 +133,8 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
         const availableStops = restored.filter(Boolean);
         setDraft({ name: typeof saved.name === "string" ? saved.name : "Lộ trình cá nhân", sourceRouteId: saved.sourceRouteId, pois: availableStops });
         if (availableStops.length !== saved.poiIds.length) {
+          const source = publishedRoutes.find(route => route.id === saved.sourceRouteId);
+          beforeEdit.current = { name: source.name, sourceRouteId: source.id, pois: source.pois };
           setEditing(true);
           setNotice("routeUnavailableStops");
         } else {
@@ -236,6 +239,7 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
 
   const currentPreview = preview.requestKey === previewKey && !preview.error && !validationError ? preview.data : null;
   const start = async () => {
+    if (!reliableJourneyFix(location, Date.now())) { setSaveError(t("gpsAccuracyNeeded")); return; }
     setSaving(true); setSaveError("");
     try {
       const result = await routeApi(`/routes/${draft.sourceRouteId}/start`, {
@@ -328,7 +332,7 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
             <p className="route-message" role="status">{stops.length} {t("place")} · {currentPreview
               ? `${distanceLabel(currentPreview.totalDistanceMeters)} · ${currentPreview.estimatedDurationMinutes} ${t("walkingMinutes")}`
               : busy ? t("recalculatingRoute") : t("routeCalculationFailed")}</p>
-            <div className="route-language-choice"><strong>NGÔN NGỮ DỊCH :</strong><LanguagePicker language={language} onChange={onLanguageChange} /></div>
+            <div className="route-language-choice"><strong>{t("narrationLanguage")}</strong><LanguagePicker language={language} onChange={onLanguageChange} /></div>
             {editing ? <DndContext sensors={sensors} collisionDetection={closestCenter}
             onDragStart={({ active }) => { setActivePoiId(active.id); setMenuPoiId(null); }}
             onDragEnd={finishDrag} onDragCancel={() => setActivePoiId(null)}>

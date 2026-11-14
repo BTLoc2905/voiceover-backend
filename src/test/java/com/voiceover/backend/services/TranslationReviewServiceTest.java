@@ -202,4 +202,47 @@ class TranslationReviewServiceTest {
     }
 
     String revision(String code) { return TranslationReviewService.revision(f.translations.get(code)); }
+
+    @Test void unchangedManualSaveKeepsAudioAndDoesNotQueueAnotherJobButExplicitRegenerateDoes() {
+        f.enqueue(); f.finish("en", "EN");
+        String url = f.files.get("en").getFilePath();
+        f.service.submit(1L, "en", " EN ", revision("en"), false);
+        assertEquals(2, f.jobs.size()); assertEquals(url, f.files.get("en").getFilePath());
+        assertTrue(f.translations.get("en").isManualEdit());
+        f.service.submit(1L, "en", null, revision("en"), true);
+        assertEquals(3, f.jobs.size()); assertEquals("TTS_ONLY", f.latest("en").getTaskType());
+    }
+
+    @Test void unchangedSaveRepairsMissingAudioWithoutTranslatingAgain() {
+        f.enqueue(); f.finish("en", "EN");
+        when(f.generator.hasUsableFile(f.files.get("en").getFilePath())).thenReturn(false);
+        f.service.submit(1L, "en", "EN", revision("en"), false);
+        assertEquals(3, f.jobs.size()); assertEquals("TTS_ONLY", f.latest("en").getTaskType());
+    }
+
+    @Test void savingSourceMetadataRepeatedlyDoesNotCreateDuplicateStaleManualTasks() {
+        f.enqueue(); f.finish("vi", "VI"); f.finish("en", "EN");
+        f.service.submit(1L, "en", "Manual", revision("en"), false);
+        f.poi.setDescriptionSource("Changed"); f.enqueue();
+        int before = f.jobs.size(); f.enqueue(); f.enqueue();
+        assertEquals(before, f.jobs.size()); assertEquals("STALE", f.translations.get("en").getStatus());
+        assertEquals("Manual", f.translations.get("en").getContent());
+    }
+
+    @Test void missingOrInvalidGeneratedFileCannotBePublishedAsCompleted() {
+        f.enqueue(); var work = f.translate("en", "EN");
+        when(f.generator.hasUsableFile("/missing.wav")).thenReturn(false);
+        assertFalse(f.service.complete(work, new AudioGenerationService.GeneratedAudio("/missing.wav", 10)));
+        assertEquals("COMPLETED", f.translations.get("en").getStatus());
+        assertEquals("FAILED", f.files.get("en").getStatus()); assertNull(f.files.get("en").getFilePath());
+        assertEquals("FAILED", f.latest("en").getStatus());
+    }
+
+    @Test void deactivatedLanguageOnRecoveryDoesNotLeaveTranslationOrAudioProcessingForever() {
+        f.enqueue(); f.claim("en");
+        f.latest("en").setLeaseUntil(LocalDateTime.now().minusSeconds(1)); f.en.setActive(false);
+        assertNull(f.claim("en")); assertEquals("FAILED", f.latest("en").getStatus());
+        assertEquals("FAILED", f.translations.get("en").getStatus());
+        assertEquals("FAILED", f.files.get("en").getStatus());
+    }
 }

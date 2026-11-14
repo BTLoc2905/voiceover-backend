@@ -113,5 +113,16 @@
   "stopNavigation": "탐색 중지 · 목록으로 돌아가기",
   "requestFailed": "데이터를 로드할 수 없습니다. 다시 시도해 주세요.",
   "narrationFailed": "내레이션을 로드할 수 없습니다. 다시 시도해 주세요.",
-  "locationUnavailable": "현재 위치를 확인할 수 없습니다. 지도에서 장소를 선택할 수는 있습니다."
+  "locationUnavailable": "현재 위치를 확인할 수 없습니다. 지도에서 장소를 선택할 수는 있습니다.",
+  "tapToPlay": "탭하여 듣기",
+  "audioUnavailable": "오디오를 사용할 수 없습니다. 해설문을 읽을 수 있습니다.",
+  "fallbackAudio": "선택한 언어의 오디오를 사용할 수 없어 대체 오디오를 재생합니다",
+  "skipped": "건너뜀",
+  "notVisited": "방문 전",
+  "journeyCompleted": "여정 종료",
+  "progressNotSaved": "이 기기에 진행 상황을 저장할 수 없습니다. 현재 방문 중에만 유지됩니다.",
+  "gpsDenied": "위치 접근이 거부되었습니다. 지도에서 장소를 선택할 수 있습니다. 브라우저 설정에서 위치를 허용하고 다시 시도하세요.",
+  "gpsWeak": "GPS 신호가 약합니다. 위치가 부정확하여 자동 해설을 일시 중지했습니다.",
+  "descriptionFallback": "원본 설명을 표시합니다",
+  "mapUnavailable": "지도를 불러올 수 없습니다. 네트워크 연결을 확인하세요."
 }
