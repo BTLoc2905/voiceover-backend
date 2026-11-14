@@ -11,9 +11,8 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-public class RouteSessionService {
+public class RouteService {
 
-    private final SessionRepository sessionRepo;
     private final RouteRepository routeRepo;
     private final RouteStopRepository routeStopRepo;
     private final PoiRepository poiRepo;
@@ -22,7 +21,7 @@ public class RouteSessionService {
     private final TranslationRepository translationRepo;
     private final LanguageRepository languageRepo;
 
-    // UC03 & UC10: Kiểm tra tính hợp lệ (2-10 POI, tất cả phải PUBLISHED) và tính toán lại quãng đường/thời gian
+    // UC03 & UC09: Kiểm tra tính hợp lệ (2-10 POI, tất cả phải PUBLISHED) và tính toán lại quãng đường/thời gian
     public Map<String, Object> validateAndCalculateCustomRoute(List<Long> poiIds) {
         List<Poi> orderedPois = validateStops(poiIds);
         WalkingDirectionsService.WalkingRoute walkingRoute = walkingDirectionsService.calculate(orderedPois);
@@ -51,7 +50,7 @@ public class RouteSessionService {
             Poi p = poiRepo.findById(id)
                     .orElseThrow(() -> new IllegalArgumentException("POI ID " + id + " không tồn tại."));
             if (!published(p.getStatus())) {
-                throw new IllegalArgumentException("POI '" + p.getName() + "' chưa được xuất bản, không thể đưa vào lộ trình (UC03-E3 / UC10-E2).");
+                throw new IllegalArgumentException("POI '" + p.getName() + "' chưa được xuất bản, không thể đưa vào lộ trình (UC03-E3 / UC09-E2).");
             }
             if (!hasValidCoordinates(p)) {
                 throw new IllegalArgumentException("POI '" + p.getName() + "' có tọa độ không hợp lệ (UC03-E3).");
@@ -69,32 +68,32 @@ public class RouteSessionService {
     }
 
     public List<Poi> getPublishedRoutePois() {
-        return poiRepo.findByStatus("PUBLISHED").stream().filter(RouteSessionService::hasValidCoordinates).toList();
+        return poiRepo.findByStatus("PUBLISHED").stream().filter(RouteService::hasValidCoordinates).toList();
     }
 
-    /** UC03 starts from an actual published route and a published session. */
+    /** Only published, valid routes are visible; legacy Tour Sessions are never consulted. */
     public List<Map<String, Object>> getSuggestedRoutes() {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Route route : routeRepo.findByStatus("PUBLISHED")) {
-            if (sessionRepo.findById(route.getSessionId()).filter(session -> published(session.getStatus())).isEmpty()) continue;
-            List<Long> ids = routeStopRepo.findByRouteIdOrderByStopOrderAsc(route.getId()).stream()
-                    .map(stop -> stop.getPoiId()).toList();
             try {
-                List<Poi> stops = validateStops(ids);
-                result.add(Map.of("id", route.getId(), "name", route.getName(), "sessionId", route.getSessionId(),
-                        "stopCount", stops.size(), "pois", stops));
+                nameOf(route.getName(), true);
+                List<Poi> stops = validateStops(idsOf(route.getId()));
+                Map<String, Object> view = new LinkedHashMap<>();
+                view.put("id", route.getId()); view.put("name", route.getName());
+                view.put("description", route.getDescription());
+                view.put("stopCount", stops.size()); view.put("pois", stops);
+                result.add(view);
             } catch (IllegalArgumentException ignored) {
-                // A route containing a hidden/deleted/invalid POI is not available to tourists.
+                // Invalid/hidden POIs also make a legacy published route unavailable.
             }
         }
         return result;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Route saveRouteWithStops(Long sessionId, String routeName, String status, List<Long> poiSequence) {
-        return writeRoute(sessionId, null, routeName, status, poiSequence);
+    public Route createRoute(String name, String description, String status, List<Long> poiIds) {
+        return writeRoute(null, name, description, status, poiIds);
     }
-
     static boolean published(String status) { return "PUBLISHED".equalsIgnoreCase(status); }
 
     private String statusOf(String value) {
@@ -110,10 +109,6 @@ public class RouteSessionService {
         return name;
     }
 
-    private Session lockSession(Long id) {
-        return sessionRepo.findForUpdate(id).orElseThrow(() -> new IllegalArgumentException("Session không tồn tại: " + id));
-    }
-
     private List<Long> idsOf(Long routeId) {
         return routeStopRepo.findByRouteIdOrderByStopOrderAsc(routeId).stream().map(RouteStop::getPoiId).toList();
     }
@@ -125,23 +120,19 @@ public class RouteSessionService {
                 .orElseThrow(() -> new IllegalArgumentException("POI không tồn tại: " + id)));
     }
 
-    public List<Map<String, Object>> listSessions() {
-        return sessionRepo.findAll().stream().sorted(Comparator.comparing(Session::getId).reversed())
-                .map(this::sessionView).toList();
+    public List<Map<String, Object>> listRoutes() {
+        return routeRepo.findAll().stream().sorted(Comparator.comparing(Route::getId).reversed())
+                .map(this::routeView).toList();
     }
 
-    public Map<String, Object> sessionView(Session session) {
-        Map<String, Object> view = new LinkedHashMap<>();
-        view.put("id", session.getId()); view.put("name", session.getName());
-        view.put("description", session.getDescription()); view.put("status", session.getStatus().toUpperCase(Locale.ROOT));
-        view.put("routes", routeRepo.findBySessionId(session.getId()).stream().map(this::routeView).toList());
-        return view;
+    public Map<String, Object> getRoute(Long id) {
+        return routeView(routeRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Route không tồn tại: " + id)));
     }
-
     public Map<String, Object> routeView(Route route) {
         List<Long> ids = idsOf(route.getId());
         Map<String, Object> view = new LinkedHashMap<>();
-        view.put("id", route.getId()); view.put("sessionId", route.getSessionId());
+        view.put("id", route.getId()); view.put("description", route.getDescription());
         view.put("name", route.getName()); view.put("status", route.getStatus().toUpperCase(Locale.ROOT));
         view.put("poiIds", ids); view.put("stopCount", ids.size());
         List<String> issues = new ArrayList<>();
@@ -152,76 +143,30 @@ public class RouteSessionService {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Session saveSession(Long id, String name, String description, String requestedStatus) {
-        String status = statusOf(requestedStatus);
-        String cleanName = nameOf(name, published(status));
-        if (description != null && description.length() > 500) throw new IllegalArgumentException("Mô tả Session tối đa 500 ký tự.");
-        Session session = id == null ? new Session() : lockSession(id);
-        if (published(status)) {
-            List<Route> routes = id == null ? List.of() : routeRepo.findBySessionId(id);
-            List<Route> publishedRoutes = routes.stream().filter(route -> published(route.getStatus())).toList();
-            if (publishedRoutes.isEmpty()) throw new IllegalArgumentException("Session cần ít nhất một Route hợp lệ đã xuất bản. Hãy lưu nháp Session, tạo và xuất bản Route trước.");
-            lockPois(publishedRoutes.stream().flatMap(route -> idsOf(route.getId()).stream()).distinct().toList());
-            for (Route route : publishedRoutes) {
-                try { nameOf(route.getName(), true); validateStops(idsOf(route.getId())); }
-                catch (IllegalArgumentException error) { throw new IllegalArgumentException("Route '" + route.getName() + "' (#" + route.getId() + ") chưa hợp lệ: " + error.getMessage()); }
-            }
-        }
-        session.setName(cleanName); session.setDescription(description); session.setStatus(status);
-        return sessionRepo.save(session);
-    }
-
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public void deleteSession(Long sessionId) {
-        Session session = lockSession(sessionId);
-        if (published(session.getStatus())) {
-            throw new RouteConflictException("Hãy chuyển Session về Nháp trước khi xóa.");
-        }
-        for (Route route : routeRepo.findBySessionId(sessionId)) {
-            routeStopRepo.deleteByRouteId(route.getId());
-            routeStopRepo.flush();
-            routeRepo.delete(route);
-        }
-        routeRepo.flush();
-        sessionRepo.delete(session);
-    }
-
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public void deleteRoute(Long sessionId, Long routeId) {
-        Session session = lockSession(sessionId);
-        if (published(session.getStatus())) {
-            throw new RouteConflictException("Hãy chuyển Session về Nháp trước khi xóa Route.");
-        }
-        Route route = routeRepo.findById(routeId)
+    public void deleteRoute(Long routeId) {
+        Route route = routeRepo.findForUpdate(routeId)
                 .orElseThrow(() -> new IllegalArgumentException("Route không tồn tại: " + routeId));
-        if (!sessionId.equals(route.getSessionId())) {
-            throw new IllegalArgumentException("Route không thuộc Session này.");
-        }
         routeStopRepo.deleteByRouteId(routeId);
         routeStopRepo.flush();
         routeRepo.delete(route);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Route updateRoute(Long sessionId, Long routeId, String name, String status, List<Long> poiIds) {
-        return writeRoute(sessionId, routeId, name, status, poiIds);
+    public Route updateRoute(Long routeId, String name, String description, String status, List<Long> poiIds) {
+        return writeRoute(routeId, name, description, status, poiIds);
     }
 
-    private Route writeRoute(Long sessionId, Long routeId, String name, String requestedStatus, List<Long> requestedIds) {
-        Session session = lockSession(sessionId);
+    private Route writeRoute(Long routeId, String name, String description, String requestedStatus, List<Long> requestedIds) {
         String status = statusOf(requestedStatus);
         String cleanName = nameOf(name, published(status));
+        if (description != null && description.length() > 10000)
+            throw new IllegalArgumentException("Mô tả Route tối đa 10.000 ký tự.");
         List<Long> ids = requestedIds == null ? List.of() : requestedIds;
-        Route route = routeId == null ? new Route() : routeRepo.findById(routeId)
+        Route route = routeId == null ? new Route() : routeRepo.findForUpdate(routeId)
                 .orElseThrow(() -> new IllegalArgumentException("Route không tồn tại: " + routeId));
-        if (routeId != null && !sessionId.equals(route.getSessionId())) throw new IllegalArgumentException("Route không thuộc Session này.");
         lockPois(ids);
         if (published(status)) validateStops(ids);
-        if (published(session.getStatus()) && published(route.getStatus()) && !published(status)
-                && routeRepo.findBySessionId(sessionId).stream().noneMatch(other -> !other.getId().equals(routeId) && published(other.getStatus()) && routeView(other).get("publishIssues").equals(List.of()))) {
-            throw new RouteConflictException("Đây là Route xuất bản hợp lệ cuối cùng. Hãy chuyển Session về Nháp trước khi chuyển Route về Nháp.");
-        }
-        route.setSessionId(sessionId); route.setName(cleanName); route.setStatus(status);
+        route.setName(cleanName); route.setDescription(description == null ? "" : description.strip()); route.setStatus(status);
         route = routeRepo.saveAndFlush(route);
         routeStopRepo.deleteByRouteId(route.getId());
         routeStopRepo.flush(); // Release unique(route_id, stop_order) before inserting the new sequence.
@@ -230,7 +175,6 @@ public class RouteSessionService {
         routeStopRepo.flush();
         return route;
     }
-
     public Map<String, Object> poiCoverage(Long poiId) {
         Poi poi = poiRepo.findById(poiId).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
         List<Map<String, Object>> languages = languageRepo.findByIsActiveTrue().stream().map(language -> {
@@ -250,14 +194,14 @@ public class RouteSessionService {
         Route route = requirePublicRoute(routeId);
         List<Long> selected = personalPoiIds == null ? idsOf(routeId) : personalPoiIds;
         Map<String, Object> result = new LinkedHashMap<>(validateAndCalculateCustomRoute(selected));
-        result.put("routeId", routeId); result.put("sessionId", route.getSessionId()); result.put("name", route.getName());
+        result.put("routeId", routeId); result.put("name", route.getName()); result.put("description", route.getDescription());
         return result;
     }
 
     private Route requirePublicRoute(Long id) {
         Route route = routeRepo.findById(id).orElseThrow(() -> new IllegalArgumentException("Route không tồn tại."));
-        Session session = sessionRepo.findById(route.getSessionId()).orElseThrow(() -> new IllegalArgumentException("Session không tồn tại."));
-        if (!published(route.getStatus()) || !published(session.getStatus())) throw new RouteConflictException("Route hoặc Session đã tạm đóng. Hãy chọn lộ trình khác.");
+        if (!published(route.getStatus())) throw new RouteConflictException("Route đã ẩn. Hãy chọn lộ trình khác.");
+        nameOf(route.getName(), true);
         validateStops(idsOf(id));
         return route;
     }

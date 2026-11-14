@@ -371,35 +371,54 @@ Các thiết lập cố định: `spring.flyway.enabled=true`, `spring.jpa.hiber
 
 ## 9. Docker
 
-Dockerfile dùng **multi-stage build**: stage `build` đóng gói JAR bằng Maven (bỏ qua test), stage chạy dùng JRE 21 gọn nhẹ.
+[Docker Compose](./compose.yaml) chạy ba dịch vụ: Nginx/React, backend Java có Python/Edge-TTS và MySQL 8.4. Frontend là cổng truy cập chung; Nginx chuyển API, ảnh và audio đến backend qua mạng nội bộ Docker. Backend và MySQL không mở cổng riêng ra máy Windows.
 
-```bash
-docker build -t voiceover-backend .
-```
-
-```bash
-docker run --rm -p 8081:8081 \
-  -e DB_URL="jdbc:mysql://host.docker.internal:3306/voiceover?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
-  -e DB_USERNAME="voiceover" \
-  -e DB_PASSWORD="voiceover" \
-  voiceover-backend
-```
-
-<details>
-<summary>PowerShell</summary>
+Mở Docker Desktop ở chế độ Linux containers. Lần đầu, tạo cấu hình riêng từ [mẫu biến môi trường](./.env.example):
 
 ```powershell
-docker build -t voiceover-backend .
-docker run --rm -p 8081:8081 `
-  -e DB_URL="jdbc:mysql://host.docker.internal:3306/voiceover?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" `
-  -e DB_USERNAME="voiceover" `
-  -e DB_PASSWORD="voiceover" `
-  voiceover-backend
+if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
 ```
 
-</details>
+Nếu đã có `.env`, giữ nguyên các thiết lập đang dùng và bổ sung biến còn thiếu từ file mẫu. Đặt `MYSQL_PASSWORD` và `MYSQL_ROOT_PASSWORD` thành hai mật khẩu riêng. `FRONTEND_PORT` mặc định là `8088`; nếu cổng đang được dùng thì đổi giá trị này. `.env` đã được Git bỏ qua và không được đưa vào build context.
 
-Image đã publish: `ghcr.io/<owner>/voiceover-backend` (tag `latest` và tag theo commit SHA).
+Khởi động tại thư mục gốc dự án:
+
+```powershell
+docker compose up -d --build
+```
+
+Mở giao diện khách tại **http://localhost:8088/** và Admin tại **http://localhost:8088/admin**. Nếu đã đổi `FRONTEND_PORT`, dùng cổng tương ứng. Kiểm tra trạng thái và log:
+
+```powershell
+docker compose ps
+docker compose logs --tail=100 backend
+```
+
+MySQL phải hoàn tất khởi tạo và trả lời truy vấn trước khi backend được khởi động. Frontend đợi API backend sẵn sàng. Flyway áp dụng migration lên database Docker; cấu hình Compose yêu cầu Hibernate kiểm tra schema thay vì tự thay đổi schema.
+
+Database Docker là database riêng, không tự chứa POI/Route đang lưu trên MySQL Windows. Các migration khởi tạo danh mục ngôn ngữ và tài khoản Admin; muốn mang dữ liệu nghiệp vụ đang có sang cần xuất/nhập riêng. Ảnh/audio đang nằm trên máy Windows cũng chưa tự được chép vào các volume Docker.
+
+Ba named volume giữ dữ liệu qua lần tạo lại container:
+
+| Volume trong project `voicemap` | Dữ liệu |
+|---|---|
+| `mysql_data` | Database MySQL tại `/var/lib/mysql` |
+| `audio_data` | File audio tại `/app/storage/audio` |
+| `image_data` | Ảnh tải lên tại `/app/storage/images` |
+
+Dừng và xóa container nhưng giữ volume:
+
+```powershell
+docker compose down
+```
+
+Chạy lại/cập nhật code bằng `docker compose up -d --build`. Không thêm `-v` vào lệnh `down` nếu muốn giữ dữ liệu. Mật khẩu MySQL trong `.env` được dùng khi volume database khởi tạo lần đầu; sửa biến môi trường sau đó không tự đổi mật khẩu tài khoản đã tồn tại.
+
+Edge-TTS dùng Python Linux đã có trong image, không dùng virtualenv Windows. Cấu hình TTS qua `TTS_PROVIDER` và `EDGE_TTS_TIMEOUT_SECONDS`; nếu chọn `google-standard`, cung cấp `GOOGLE_CLOUD_API_KEY`. Việc dịch/tổng hợp giọng nói và tải bản đồ/định tuyến cần kết nối Internet.
+
+Nếu Edge-TTS trả `NoAudioReceived`, [worker](./scripts/edge_tts_worker.py) thử lại tối đa 3 lần, chờ 1 rồi 2 giây, giữ nguyên văn bản và giọng đọc. File dở bị xóa trước lần thử tiếp theo; chỉ MP3 có frame âm thanh và thời lượng hợp lệ mới được chấp nhận. Khi hết lượt, worker trả mã 75 để pipeline báo lỗi, không nhân tiếp số lần thử. Đây là cách xử lý lỗi tạm thời, không bảo đảm dịch vụ bên ngoài luôn khả dụng. Kiểm tra phần này không cần mạng bằng `.\.venv-edge-tts\Scripts\python.exe -m unittest discover -s scripts -p test_edge_tts_worker.py`.
+
+Để thử GPS từ máy khác qua VS Code Dev Tunnel, chia sẻ cổng frontend (`8088` mặc định) và dùng địa chỉ HTTPS của tunnel. Không cấu hình frontend gọi `localhost:8080` trên máy khách.
 
 ---
 

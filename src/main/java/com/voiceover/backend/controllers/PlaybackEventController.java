@@ -6,7 +6,6 @@ import com.voiceover.backend.repositories.LanguageRepository;
 import com.voiceover.backend.repositories.PoiRepository;
 import com.voiceover.backend.repositories.UsageEventRepository;
 import com.voiceover.backend.repositories.RouteRepository;
-import com.voiceover.backend.repositories.SessionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +19,6 @@ public class PlaybackEventController {
     private final LanguageRepository languageRepo;
     private final UsageEventRepository eventRepo;
     private final RouteRepository routeRepo;
-    private final SessionRepository sessionRepo;
     private record Key(String client, String playback, String type) {}
     private final Map<Key, Long> recent = new LinkedHashMap<>();
     public record Input(Long poiId, Long routeId, String languageCode, String eventType, String clientId, String playbackId) {}
@@ -39,8 +37,6 @@ public class PlaybackEventController {
                 throw new IllegalArgumentException("Sự kiện chọn lộ trình không hợp lệ.");
             var route = routeRepo.findById(input.routeId()).filter(value -> "PUBLISHED".equals(value.getStatus()))
                     .orElseThrow(() -> new IllegalArgumentException("Lộ trình không còn khả dụng."));
-            if (sessionRepo.findById(route.getSessionId()).filter(value -> "PUBLISHED".equals(value.getStatus())).isEmpty())
-                throw new IllegalArgumentException("Session không còn khả dụng.");
         } else {
             if (input.routeId() != null || input.poiId() == null || input.poiId() <= 0 || input.languageCode() == null || input.languageCode().length() > 10)
                 throw new IllegalArgumentException("Sự kiện nghe không hợp lệ.");

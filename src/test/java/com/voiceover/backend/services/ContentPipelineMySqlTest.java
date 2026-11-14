@@ -101,6 +101,25 @@ class ContentPipelineMySqlTest {
         assertEquals(beforeEvents, context.getBean(CommittedEvents.class).ids.size());
     }
 
+    @Test void manualDescriptionEditsKeepArchivedAiDraftsAndQueueNewLanguageJobs() {
+        var service = context.getBean(PoiService.class);
+        Poi poi = service.saveOrUpdatePoi(newPoi());
+        var jdbc = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+        for (String status : List.of("DRAFT", "ACCEPTED", "DISCARDED", "FAILED")) {
+            jdbc.update("INSERT INTO ai_description_draft (poi_id, source_snapshot, draft_content, status, provider, model) "
+                    + "VALUES (?, '{}', ?, ?, 'gemini', 'legacy-model')", poi.getId(), "Archived " + status, status);
+        }
+        var archive = jdbc.queryForList("SELECT * FROM ai_description_draft WHERE poi_id = ? ORDER BY draft_id", poi.getId());
+        poi.setDescriptionSource("Description entered manually after removing AI suggestions");
+        Poi saved = service.saveOrUpdatePoi(poi);
+
+        assertEquals(2, saved.getContentRevision());
+        assertEquals(poi.getDescriptionSource(), context.getBean(PoiRepository.class).findById(poi.getId()).orElseThrow().getDescriptionSource());
+        var tasks = context.getBean(PipelineTaskRepository.class).findByPoiId(poi.getId());
+        assertEquals(16, tasks.stream().filter(task -> task.getSourceRevision() == 2 && "PENDING".equals(task.getStatus())).count());
+        assertEquals(archive, jdbc.queryForList("SELECT * FROM ai_description_draft WHERE poi_id = ? ORDER BY draft_id", poi.getId()));
+    }
+
     @Test void coordinatePrecisionSurvivesActualMySqlInsertAndRead() throws Exception {
         Poi input = newPoi();
         input.setLatitude(new BigDecimal("10.76261234567890123"));
@@ -125,6 +144,8 @@ class ContentPipelineMySqlTest {
         assertEquals("Legacy English", texts.findByPoiIdAndLanguageCode(legacyPoiId, "en").orElseThrow().getContent());
         assertEquals("/legacy.wav", audios.findByPoiIdAndLanguageCode(legacyPoiId, "en").orElseThrow().getFilePath());
         assertTrue(tasks.findByPoiId(legacyPoiId).stream().allMatch(t -> "FAILED".equals(t.getStatus())));
+        // Legacy content has no verified default-language audio: edit it as a draft.
+        legacy.setStatus("DRAFT");
         context.getBean(PoiService.class).saveOrUpdatePoi(legacy);
         var text = texts.findByPoiIdAndLanguageCode(legacyPoiId, "en").orElseThrow();
         assertEquals("STALE", text.getStatus()); assertEquals("Legacy English", text.getContent());

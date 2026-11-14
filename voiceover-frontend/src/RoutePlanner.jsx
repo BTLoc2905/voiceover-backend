@@ -324,6 +324,10 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
           </div>}
           {saveError && saveError !== currentError && <p className="route-message error" role="alert">{language === "vi" ? saveError : t("routeRequestFailed")}</p>}
           <div className="route-details-box">
+            {routes.find((route) => route.id === draft.sourceRouteId)?.description && <p className="route-message">{routes.find((route) => route.id === draft.sourceRouteId).description}</p>}
+            <p className="route-message" role="status">{stops.length} {t("place")} · {currentPreview
+              ? `${distanceLabel(currentPreview.totalDistanceMeters)} · ${currentPreview.estimatedDurationMinutes} ${t("walkingMinutes")}`
+              : busy ? t("recalculatingRoute") : t("routeCalculationFailed")}</p>
             <div className="route-language-choice"><strong>NGÔN NGỮ DỊCH :</strong><LanguagePicker language={language} onChange={onLanguageChange} /></div>
             {editing ? <DndContext sensors={sensors} collisionDetection={closestCenter}
             onDragStart={({ active }) => { setActivePoiId(active.id); setMenuPoiId(null); }}

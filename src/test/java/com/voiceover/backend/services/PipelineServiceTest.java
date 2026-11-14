@@ -68,6 +68,19 @@ class PipelineServiceTest {
         assertTrue(f.latest("en").getErrorMessage().contains("Chưa cấu hình TTS"));
     }
 
+    @Test void exhaustedEdgeWorkerIsNotRetriedAndNeverPublishesPartialAudio() throws Exception {
+        f.poi.setSourceLanguageCode("en"); f.enqueue();
+        when(f.generator.generate(any(), any(), any()))
+                .thenThrow(new EdgeTtsRetriesExhaustedException("No audio after 3 worker attempts"));
+        worker.resumeTask(f.latest("en").getId()).join();
+        verify(f.generator, times(1)).generate(any(), any(), any());
+        assertEquals("FAILED", f.latest("en").getStatus());
+        assertEquals("FAILED", f.files.get("en").getStatus());
+        assertNull(f.files.get("en").getFilePath());
+        assertEquals("COMPLETED", f.translations.get("en").getStatus());
+        assertTrue(f.latest("en").getErrorMessage().contains("3 worker attempts"));
+    }
+
     @Test void restartBetweenTranslationAndAudioDoesNotCallTranslationAgain() throws Exception {
         f.enqueue(); f.translate("en", "Persisted English");
         f.latest("en").setLeaseUntil(LocalDateTime.now().minusSeconds(1));

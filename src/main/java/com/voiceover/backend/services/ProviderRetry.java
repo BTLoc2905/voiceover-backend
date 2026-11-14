@@ -7,7 +7,7 @@ final class ProviderRetry {
 
     static boolean isRetryable(Exception error) {
         if (error instanceof InterruptedException || error instanceof IllegalArgumentException
-                || error instanceof IllegalStateException) return false;
+                || error instanceof IllegalStateException || error instanceof EdgeTtsRetriesExhaustedException) return false;
         if (error instanceof ProviderRequestException providerError) return providerError.isRetryable();
         return error instanceof IOException;
     }

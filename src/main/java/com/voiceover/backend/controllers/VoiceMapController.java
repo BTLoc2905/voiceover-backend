@@ -20,7 +20,7 @@ public class VoiceMapController {
 
     private final PoiService poiService;
     private final PipelineService pipelineService;
-    private final RouteSessionService routeSessionService;
+    private final RouteService routeService;
     private final PoiRepository poiRepo;
     private final LanguageRepository languageRepo;
     private final TranslationRepository translationRepo;
@@ -59,7 +59,7 @@ public class VoiceMapController {
     @PostMapping("/public/routes/customize")
     public ResponseEntity<?> customizePersonalRoute(@RequestBody List<Long> poiIds) {
         try {
-            return ResponseEntity.ok(routeSessionService.validateAndCalculateCustomRoute(poiIds));
+            return ResponseEntity.ok(routeService.validateAndCalculateCustomRoute(poiIds));
         } catch (WalkingDirectionsService.NoWalkingRouteException exception) {
             return ResponseEntity.status(422).body(Map.of("code", "NO_WALKING_ROUTE", "message", exception.getMessage()));
         } catch (IllegalArgumentException exception) {
@@ -71,12 +71,12 @@ public class VoiceMapController {
 
     @GetMapping("/public/routes")
     public ResponseEntity<?> getSuggestedRoutes() {
-        return ResponseEntity.ok(routeSessionService.getSuggestedRoutes());
+        return ResponseEntity.ok(routeService.getSuggestedRoutes());
     }
 
     @GetMapping("/public/pois")
     public ResponseEntity<?> getRoutePoiCatalog() {
-        return ResponseEntity.ok(routeSessionService.getPublishedRoutePois());
+        return ResponseEntity.ok(routeService.getPublishedRoutePois());
     }
 
     @GetMapping("/public/languages")
@@ -153,21 +153,11 @@ public class VoiceMapController {
         return ResponseEntity.ok(poiService.saveOrUpdatePoi(poi));
     }
 
-    // UC06: Xóa POI có kiểm tra ràng buộc Route/Session đang xuất bản
+    // UC06: Xóa POI có kiểm tra ràng buộc Route đang xuất bản
     @DeleteMapping("/admin/pois/{poiId}")
     public ResponseEntity<?> deletePoi(@PathVariable Long poiId) {
         poiService.deletePoiSafely(poiId);
         return ResponseEntity.ok(Map.of("message", "Đã xóa POI thành công."));
-    }
-
-    // UC10: Tạo và lưu Route kèm thứ tự POI (poi_sequence) trong Session
-    @PostMapping(value = "/admin/sessions/{sessionId}/routes", params = "name")
-    public ResponseEntity<?> createRoute(
-            @PathVariable Long sessionId,
-            @RequestParam String name,
-            @RequestParam(defaultValue = "DRAFT") String status,
-            @RequestBody List<Long> poiSequence) {
-        return ResponseEntity.ok(routeSessionService.saveRouteWithStops(sessionId, name, status, poiSequence));
     }
 
     // UC11: Giám sát hệ thống và thống kê sử dụng thực tế (Cập nhật <= 10s, quy ước Xanh/Vàng/Đỏ)
