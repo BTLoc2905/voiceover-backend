@@ -35,6 +35,27 @@ class RouteServiceTest {
     }
 
     @Test
+    void walkingLegUsesActualGpsAndReturnsDirectionsTimeWithoutWritingProgress() {
+        when(routes.findById(10L)).thenReturn(Optional.of(Route.builder().id(10L).name("Route").status("PUBLISHED").build()));
+        when(stops.findByRouteIdOrderByStopOrderAsc(10L)).thenReturn(List.of(
+                RouteStop.builder().poiId(1L).stopOrder(1).build(), RouteStop.builder().poiId(2L).stopOrder(2).build()));
+        when(pois.findById(1L)).thenReturn(Optional.of(poi(1)));
+        when(pois.findById(2L)).thenReturn(Optional.of(poi(2)));
+        when(directions.calculate(anyList())).thenAnswer(invocation -> {
+            List<Poi> input = invocation.getArgument(0);
+            assertEquals(10.75, input.getFirst().getLatitude().doubleValue());
+            assertEquals(106.65, input.getFirst().getLongitude().doubleValue());
+            assertEquals(2L, input.getLast().getId());
+            return new WalkingDirectionsService.WalkingRoute(1500, 721, Map.of("type", "LineString"), List.of());
+        });
+        var leg = service.walkingLeg(10L, 2L, 10.75, 106.65);
+        assertEquals(721, leg.get("durationSeconds")); assertEquals(13, leg.get("estimatedDurationMinutes"));
+        assertEquals(1500L, leg.get("totalDistanceMeters"));
+        verify(pois, never()).save(any()); verify(routes, never()).save(any()); verify(stops, never()).save(any());
+        assertThrows(IllegalArgumentException.class, () -> service.walkingLeg(10L, 2L, Double.NaN, 106));
+    }
+
+    @Test
     void rejectsInvalidCountsAndDuplicateOrMissingIdsBeforeRouting() {
         for (List<Long> ids : List.of(List.of(1L), LongStream.rangeClosed(1, 11).boxed().toList(), List.of(1L, 1L), List.of(0L, 2L))) {
             assertThrows(IllegalArgumentException.class, () -> service.validateAndCalculateCustomRoute(ids));

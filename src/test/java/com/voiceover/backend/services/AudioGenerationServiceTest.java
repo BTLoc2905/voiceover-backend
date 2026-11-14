@@ -15,6 +15,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AudioGenerationServiceTest {
+    @Test void everyConfiguredLanguageHasAnExplicitEdgeVoiceIncludingThai() {
+        var generator = new AudioGenerationService("", "edge", "python", "scripts/edge_tts_worker.py", 90, "unused", "https://unused.example");
+        for (String code : List.of("vi", "en", "ja", "ko", "zh-CN", "fr", "de", "es", "ru", "th", "id", "it", "pt", "ar", "ms", "hi"))
+            assertTrue(generator.supportsLanguage(code), code);
+        @SuppressWarnings("unchecked") var voices = (Map<String, String>) org.springframework.test.util.ReflectionTestUtils.getField(generator, "EDGE_VOICES");
+        assertEquals(16, voices.size()); assertEquals("th-TH-PremwadeeNeural", voices.get("th"));
+        assertFalse(generator.supportsLanguage("xx"));
+    }
     @TempDir Path storage;
     @Test void chunksKeepAllUnicodeAndNeverSplitBeyondProviderLimit() {
         String text="Tiếng Việt 🙂 日本語. ".repeat(1200)+"Cuối cùng";

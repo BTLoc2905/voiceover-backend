@@ -131,6 +131,8 @@ public class TranslationReviewService {
             if (reusable && audio != null && ((!audioSupported && "TEXT_ONLY".equals(audio.getStatus()))
                     || ("COMPLETED".equals(audio.getStatus()) && generator.hasUsableFile(audio.getFilePath())))) continue;
             PipelineTask previous = tasks.findFirstByPoiIdAndTargetLanguageCodeOrderByIdDesc(poi.getId(), code).orElse(null);
+            if (!changed && text.isManualEdit() && "STALE".equals(text.getStatus()) && previous != null
+                    && hash.equals(previous.getSourceHash())) continue;
             if (!changed && text.isManualEdit() && previous != null && "TTS_ONLY".equals(previous.getTaskType())
                     && "FAILED".equals(previous.getStatus())) continue;
             PipelineTask task = newTask(poi, code, reusable ? "TTS_ONLY" : "TRANSLATE_TTS", snapshot);
@@ -176,8 +178,15 @@ public class TranslationReviewService {
             if (content == null || content.isBlank()) throw new IllegalArgumentException("Nội dung bản dịch không được để trống.");
             content = content.strip();
             if (content.getBytes(StandardCharsets.UTF_8).length > 60000) throw new IllegalArgumentException("Bản dịch vượt giới hạn 60.000 byte UTF-8.");
+            boolean unchanged = content.equals(text.getContent()) && "COMPLETED".equals(text.getStatus())
+                    && hash.equals(text.getSourceHash());
             text.setContent(content); text.setManualEdit(true); text.setStatus("COMPLETED"); text.setSourceHash(hash);
             text = translations.saveAndFlush(text);
+            Audio existing = audios.findByPoiIdAndLanguageCode(poiId, code).orElse(null);
+            if (unchanged && existing != null && Objects.equals(existing.getTranslationId(), text.getId())
+                    && ((!supportsAudio(language) && "TEXT_ONLY".equals(existing.getStatus()))
+                    || (supportsAudio(language) && "COMPLETED".equals(existing.getStatus())
+                    && generator.hasUsableFile(existing.getFilePath())))) return detail(poi, language);
         }
         resetAudio(text, "PENDING");
         PipelineTask task = newTask(poi, code, "TTS_ONLY", snapshot);
@@ -197,8 +206,10 @@ public class TranslationReviewService {
         Poi poi = requirePoi(task.getPoiId());
         if (!current(task, poi) || !latest(task)) { supersede(task); return null; }
         Language language = requireLanguage(task.getTargetLanguageCode());
-        if (!language.isActive()) { failTask(task, "Ngôn ngữ đã ngừng hoạt động."); return null; }
         Translation text = translations.findByPoiIdAndLanguageCode(poi.getId(), language.getCode()).orElseThrow();
+        if (!language.isActive()) {
+            failOwned(task, !"COMPLETED".equals(text.getStatus()), "Ngôn ngữ đã ngừng hoạt động."); return null;
+        }
         boolean ready = task.getSourceHash().equals(text.getSourceHash()) && "COMPLETED".equals(text.getStatus())
                 && text.getContent() != null && !text.getContent().isBlank();
         if ("TTS_ONLY".equals(task.getTaskType()) && (!ready || !Objects.equals(task.getTranslationRevision(), revision(text)))) {
@@ -244,6 +255,9 @@ public class TranslationReviewService {
         Translation text = translations.findByPoiIdAndLanguageCode(work.poiId(), work.code()).orElseThrow();
         if (!Objects.equals(work.translationRevision(), revision(text)) || !"COMPLETED".equals(text.getStatus())) {
             failOwned(task, false, "Bản dịch đã đổi khi đang tạo audio."); return false;
+        }
+        if (generated != null && (generated.durationSec() <= 0 || !generator.hasUsableFile(generated.url()))) {
+            failOwned(task, false, "File audio chưa tồn tại hoặc không hợp lệ; không công bố kết quả."); return false;
         }
         Audio audio = audios.findByPoiIdAndLanguageCode(work.poiId(), work.code()).orElseThrow();
         audio.setStatus(generated == null ? "TEXT_ONLY" : "COMPLETED");

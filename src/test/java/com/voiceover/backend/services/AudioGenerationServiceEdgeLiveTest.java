@@ -11,6 +11,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class AudioGenerationServiceEdgeLiveTest {
     @TempDir Path storage;
 
+    @Test void javaWorkerCreatesRealThaiMp3WithoutChangingLanguage() throws Exception {
+        var generator = new AudioGenerationService("", "edge", ".venv-edge-tts/Scripts/python.exe",
+                "scripts/edge_tts_worker.py", 90, storage.toString(), "https://unused.example");
+        var audio = generator.generate(123L, "th", "สวัสดี นี่คือการทดสอบเสียงภาษาไทย");
+        assertTrue(audio.url().endsWith(".mp3")); assertTrue(audio.durationSec() > 0);
+        assertTrue(generator.hasUsableFile(audio.url()));
+    }
+
     @Test void javaWorkerCreatesRealVietnameseAndEnglishMp3() throws Exception {
         var generator = new AudioGenerationService("", "edge", ".venv-edge-tts/Scripts/python.exe",
                 "scripts/edge_tts_worker.py", 90, storage.toString(), "https://unused.example");

@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || "";
+const API_BASE = import.meta.env?.VITE_API_URL || "";
 let cachedClientId;
 let cachedAppOpenId;
 let appOpenRequest;
@@ -43,11 +43,18 @@ export async function getGuide(poiId, language, signal) {
   const response = await fetch(`${API_BASE}/api/public/pois/${poiId}/guide?${new URLSearchParams({ lang: language, triggerType: "PRELOAD" })}`, { signal, cache: "no-store" });
   const guide = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(guide.message || "Không tải được nội dung thuyết minh. Hãy thử lại.");
-  if (guide.audioUrl) {
-    const url = new URL(guide.audioUrl.replaceAll("\\", "/").replace(/^(?!https?:|\/)/, "/"), API_BASE || globalThis.location.origin);
-    if (!["http:", "https:"].includes(url.protocol)) throw new Error("Đường dẫn audio không hợp lệ.");
-    guide.audioUrl = url.href;
-  }
+  const normalize = (path) => {
+    if (typeof path !== "string" || !path.trim()) return null;
+    try {
+      const clean = path.replaceAll("\\", "/");
+      if (/^[a-z][a-z\d+.-]*:/i.test(clean) && !/^https?:/i.test(clean)) return null;
+      const url = new URL(clean.replace(/^(?!https?:|\/)/, "/"), API_BASE || globalThis.location.origin);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+    } catch { return null; }
+  };
+  guide.audioUrl = normalize(guide.audioUrl);
+  if (Array.isArray(guide.audioCandidates)) guide.audioCandidates = guide.audioCandidates
+    .map((candidate) => ({ ...candidate, audioUrl: normalize(candidate.audioUrl) })).filter((candidate) => candidate.audioUrl);
   return guide;
 }
 

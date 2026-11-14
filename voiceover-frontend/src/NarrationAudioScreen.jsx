@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import LanguagePicker from "./LanguagePicker.jsx";
 import { guestText } from "./guestUi.js";
 
@@ -8,8 +8,10 @@ export default function NarrationAudioScreen({ player, playback, setScreen, loca
   const dragHandle = useRef(null);
   const ignoreHandleClick = useRef(false);
   const [mapHeight, setMapHeight] = useState(37);
+  const selectPoi = useCallback((_screen, id) => setScreen("audio", id, backScreen || "map"), [setScreen, backScreen]);
   const t = (key) => guestText(language, key);
-  const { guide, status, time, duration, rate, error, poiId, estimated } = playback;
+  const { guide, status, time, duration, rate, error, poiId } = playback;
+  const playable = Boolean(guide?.audioUrl) && !["idle", "loading", "error", "text-only"].includes(status);
   const poi = pois.find((item) => item.poi?.id === poiId)?.poi;
   const name = formatPoiName(guide?.poiName || poi?.name || t("place"), language);
   const formatTime = (value) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, "0")}`;
@@ -43,7 +45,8 @@ export default function NarrationAudioScreen({ player, playback, setScreen, loca
     return () => window.clearTimeout(timer);
   }, [backScreen, status, setScreen]);
   return <main className="phone-screen audio-screen">
-    <section id="audio-map" className="audio-map" style={{ height: `${mapHeight}%` }}><MapComponent location={location} pois={pois} controllerRef={mapController} language={language} />
+    <section id="audio-map" className="audio-map" style={{ height: `${mapHeight}%` }}><MapComponent location={location} pois={pois} controllerRef={mapController} language={language}
+      onPoiSelect={selectPoi} />
       <button type="button" className="audio-back-button" aria-label={t("back")} onClick={() => setScreen(backScreen || "map")}>‹</button>
       <span className="map-poi-badge">★ {name}</span>
     </section>
@@ -64,17 +67,18 @@ export default function NarrationAudioScreen({ player, playback, setScreen, loca
       <div className="audio-hero"><div className="heritage-photo" style={guide?.thumbnailUrl ? { backgroundImage: `url("${guide.thumbnailUrl}")` } : undefined}>{!guide?.thumbnailUrl && <span>{name}</span>}</div>
       <span className="auto-tag"><i />{playback.trigger === "AUTO_PLAY" ? t("autoPlayGps") : t("manualPlayback")}</span><div className="photo-title">{name}<small>VoiceMap</small></div></div>
       {status === "loading" && <p className="api-state" role="status">{t("loadingNarration")}</p>}
-      {error && <p className="api-state error" role="alert">{language === "vi" ? error : t("narrationFailed")}</p>}
-      {guide?.fallbackUsed && <p className="api-state">{t("fallbackLanguage")}</p>}
-      {guide && <p className="narration-mode">{estimated ? t("browserVoice") : t("audioFile")}</p>}
+      {error && <p className="api-state error" role="alert">{status === "blocked" ? t("tapToPlay") : status === "text-only" ? t("audioUnavailable") : language === "vi" ? error : t("narrationFailed")}</p>}
+      {status === "blocked" && <button type="button" className="primary-button" onClick={() => player.play()}>{t("tapToPlay")}</button>}
+      {guide?.fallbackUsed && <p className="api-state" role="status">{t("fallbackAudio")} ({guide.activeLanguage})</p>}
+      {guide && <p className="narration-mode">{playable ? t("audioFile") : t("narrationContent")}</p>}
       <div className="waveform" aria-hidden="true">{[12, 22, 34, 18, 28, 38, 22, 14, 30, 20, 36, 16, 26, 12].map((height, i) => <i style={{ height }} key={i} />)}</div>
       <div className="progress-row"><span>{formatTime(time)}</span><div className="progress"><b style={{ width: `${duration ? Math.min(100, time / duration * 100) : 0}%` }} /></div><span>{formatTime(duration)}</span></div>
-      <div className="audio-controls"><button aria-label={t("seekBack")} disabled={!guide} onClick={() => player.seek(-10)}>↶</button><button className="play-button" aria-label={playing ? t("pause") : t("play")} disabled={!guide || status === "starting"} onClick={() => playing ? player.pause() : player.play()}>{playing ? "Ⅱ" : "▶"}</button><button aria-label={t("seekForward")} disabled={!guide} onClick={() => player.seek(10)}>↷</button></div>
+      <div className="audio-controls"><button aria-label={t("seekBack")} disabled={!playable} onClick={() => player.seek(-10)}>↶</button><button className="play-button" aria-label={playing ? t("pause") : t("play")} disabled={!playable || status === "starting"} onClick={() => playing ? player.pause() : player.play()}>{playing ? "Ⅱ" : "▶"}</button><button aria-label={t("seekForward")} disabled={!playable} onClick={() => player.seek(10)}>↷</button></div>
       <div className="audio-options">
         <div className="audio-option-row"><span>{t("playbackSpeed")}</span><div className="speed-controls">
-          <button type="button" aria-label={`− ${t("playbackSpeed")}`} disabled={rate <= 0.75} onClick={() => player.changeRate(-0.25)}>−</button>
+          <button type="button" aria-label={`− ${t("playbackSpeed")}`} disabled={!playable || rate <= 0.75} onClick={() => player.changeRate(-0.25)}>−</button>
           <strong>{rate.toFixed(2)}×</strong>
-          <button type="button" aria-label={`+ ${t("playbackSpeed")}`} disabled={rate >= 1.5} onClick={() => player.changeRate(0.25)}>+</button>
+          <button type="button" aria-label={`+ ${t("playbackSpeed")}`} disabled={!playable || rate >= 1.5} onClick={() => player.changeRate(0.25)}>+</button>
         </div></div>
         <button className="audio-option-row" onClick={() => setScreen(backScreen === "journey" ? "journey" : "route")}>{t("viewRoute")} →</button>
         <button className="audio-option-row" onClick={() => setScreen(backScreen || "map")}>{t("skipNarration")}</button>

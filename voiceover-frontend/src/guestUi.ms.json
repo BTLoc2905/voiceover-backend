@@ -113,5 +113,16 @@
   "stopNavigation": "Hentikan navigasi · kembali ke senarai",
   "requestFailed": "Tidak dapat memuatkan data. Sila cuba lagi.",
   "narrationFailed": "Tidak dapat memuatkan penceritaan. Sila cuba lagi.",
-  "locationUnavailable": "Lokasi anda tidak tersedia. Anda masih boleh memilih tempat pada peta."
+  "locationUnavailable": "Lokasi anda tidak tersedia. Anda masih boleh memilih tempat pada peta.",
+  "tapToPlay": "Ketik untuk mendengar",
+  "audioUnavailable": "Audio tidak tersedia. Anda masih boleh membaca penerangan.",
+  "fallbackAudio": "Audio bahasa pilihan tidak tersedia. Menggunakan audio gantian",
+  "skipped": "Dilangkau",
+  "notVisited": "Belum dilawati",
+  "journeyCompleted": "Perjalanan tamat",
+  "progressNotSaved": "Kemajuan tidak dapat disimpan pada peranti ini. Hanya tersedia untuk lawatan ini.",
+  "gpsDenied": "Akses lokasi ditolak. Anda masih boleh memilih tempat pada peta. Benarkan lokasi dalam pelayar dan cuba lagi.",
+  "gpsWeak": "Isyarat GPS lemah. Lokasi anggaran; penerangan automatik dijeda.",
+  "descriptionFallback": "Memaparkan penerangan asal",
+  "mapUnavailable": "Peta tidak dapat dimuatkan. Semak sambungan rangkaian."
 }

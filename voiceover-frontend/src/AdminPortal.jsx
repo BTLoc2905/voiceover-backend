@@ -6,6 +6,7 @@ import RouteManagement from "./RouteManagement.jsx";
 import TranslationReview from "./TranslationReview.jsx";
 import { languageLabel } from "./languageDisplay.js";
 import "./AdminVisual.css";
+import { startDashboardPolling } from "./dashboardPolling.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -131,37 +132,56 @@ function Login({ onLogin }) {
 function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const load = () => api("/api/admin/monitoring/dashboard").then((value) => { setData(value); setError(""); }).catch((reason) => setError(reason.message));
-  useEffect(() => { load(); const timer = window.setInterval(load, 10000); return () => window.clearInterval(timer); }, []);
+  const [loading, setLoading] = useState(true);
+  const polling = useRef(null);
+  useEffect(() => {
+    const instance = startDashboardPolling({
+      load: async (signal) => {
+        const value = await api("/api/admin/monitoring/dashboard", { signal });
+        if (!value || !Number.isFinite(Date.parse(value.generatedAt))) throw new Error("Dữ liệu Monitoring không hợp lệ.");
+        return value;
+      },
+      onData: value => { setData(value); setError(""); },
+      onError: setError, onLoading: setLoading,
+    });
+    polling.current = instance;
+    return () => { instance.dispose(); polling.current = null; };
+  }, []);
+  const healthData = error ? null : data;
+  const emptyMessage = text => !data ? (error ? "Chưa tải được dữ liệu." : "Đang tải dữ liệu.")
+    : data.dataUnavailable ? "Số liệu tạm thời không khả dụng." : text;
   const status = (value) => <span className={`health ${value === "NORMAL" ? "green" : value === "WARNING" ? "yellow" : value === "ERROR" ? "red" : "unknown"}`}>
     {value === "NORMAL" ? "Bình thường" : value === "WARNING" ? "Cảnh báo" : value === "ERROR" ? "Lỗi" : "Chưa có dữ liệu"}</span>;
   const metric = (label, value, tone = "blue") => <div className="metric-card" key={label}><span className={`metric-icon ${tone}`}>◈</span><div><small>{label}</small><strong>{value ?? "—"}</strong></div></div>;
   return <section className="content">
-    <div className="page-heading"><div><p className="eyebrow">GIÁM SÁT & THỐNG KÊ</p><h1>Dashboard</h1><p className="muted">Dữ liệu thật, tải lại mỗi 10 giây. Thống kê sử dụng trong 24 giờ; người dùng hoạt động trong 2 phút gần nhất.</p></div>
-      <button type="button" className="secondary" onClick={load}>Làm mới</button></div>
-    {error && <div className="alert error">{error}</div>}
-    {data?.dataUnavailable && <div className="alert error">Cơ sở dữ liệu tạm thời không khả dụng; số liệu sử dụng chưa được tải.</div>}
+    <div className="page-heading"><div><p className="eyebrow">GIÁM SÁT & THỐNG KÊ</p><h1>Dashboard</h1><p className="muted">Tự cập nhật mỗi 5 giây. Thống kê sử dụng trong 24 giờ; định danh hoạt động trong 2 phút gần nhất.</p>
+      <p className="muted">Cập nhật thành công gần nhất: {data ? <time dateTime={data.generatedAt}>{new Date(data.generatedAt).toLocaleString("vi-VN")}</time> : "—"}</p>
+      {loading && <p role="status">{data ? "Đang cập nhật…" : "Đang tải dữ liệu giám sát…"}</p>}</div>
+      <button type="button" className="secondary" disabled={loading} onClick={() => polling.current?.refresh()}>Làm mới</button></div>
+    {error && <div className="alert error" role="alert">{error}{data && " Đang hiển thị số liệu của lần cập nhật trước."}</div>}
+    {data?.dataUnavailable && <div className="alert error" role="alert">Cơ sở dữ liệu tạm thời không khả dụng; số liệu sử dụng chưa được tải.</div>}
     <article className="panel monitoring-panel"><h2>Tình trạng hệ thống</h2><div className="monitoring-health">
-      <div>Ứng dụng {status(data?.applicationStatus)}</div><div>Cơ sở dữ liệu {status(data?.databaseStatus)}</div><div>Pipeline {status(data?.pipelineStatus)}</div>
+      <div>Backend {status(healthData?.applicationStatus)}</div><div>MySQL {status(healthData?.databaseStatus)}</div><div>Pipeline {status(healthData?.pipelineStatus)}</div>
     </div><p className="muted">Tỷ lệ lỗi chỉ tính phản hồi API 5xx; thời gian phản hồi là trung bình trong 5 phút gần nhất trên tiến trình backend hiện tại.</p></article>
     <div className="metric-grid">
       {metric("Tác vụ đang chờ", data?.pipelinePending)}{metric("Tác vụ đang xử lý", data?.pipelineProcessing)}
+      {metric("Tác vụ hoàn tất", data?.pipelineCompleted, "green")}
       {metric("Tác vụ lỗi", data?.pipelineFailed, "red")}{metric("Tỷ lệ lỗi API", data?.errorRatePercent == null ? null : `${data.errorRatePercent}%`, "amber")}
       {metric("Phản hồi API trung bình", data?.averageLatencyMs == null ? null : `${data.averageLatencyMs} ms`)}
     </div>
     <article className="panel monitoring-panel"><h2>Lỗi gần đây</h2><div className="log-list">
       {(data?.recentErrors || []).map((item) => <div className="log-row" key={item.id}><span className="dot error" /><span><b>{item.component}</b> · {item.message}</span><small>{new Date(item.occurredAt).toLocaleString("vi-VN")}</small></div>)}
-      {!data?.recentErrors?.length && <p className="muted">{data ? "Không ghi nhận lỗi trong 24 giờ gần đây." : "Đang tải dữ liệu."}</p>}
+      {!data?.recentErrors?.length && <p className="muted">{emptyMessage("Không ghi nhận lỗi trong 24 giờ gần đây.")}</p>}
     </div></article>
     <div className="page-heading"><div><h2>Mức sử dụng</h2><p className="muted">Các lượt nghe được ghi khi audio bắt đầu phát, không tính thao tác tải trước.</p></div></div>
     <div className="metric-grid">
-      {metric("Người dùng đang hoạt động", data?.activeUsers, "green")}{metric("Lượt nghe tự động", data?.autoListens)}
+      {metric("Định danh đang hoạt động · 2 phút", data?.activeUsers, "green")}{metric("Lượt nghe tự động", data?.autoListens)}
       {metric("Lượt nghe do chạm POI", data?.tapListens)}{metric("Tỷ lệ nghe tự động", data?.autoRatioPercent == null ? null : `${data.autoRatioPercent}%`)}
       {metric("Số POI tham quan", data?.poiCount)}{metric("Số POI đang hoạt động", data?.activePoiCount, "green")}
     </div>
-    <div className="dashboard-grid"><article className="panel"><h2>Lượt nghe theo POI · 24 giờ</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.poiUsage?.length && <p className="muted">Chưa có dữ liệu.</p>}</div></article>
-      <article className="panel"><h2>Lượt nghe theo ngôn ngữ · 24 giờ</h2><div className="log-list">{(data?.languageUsage || []).map((item) => <div className="log-row" key={item.languageCode}><span className="dot green" /><span>{languageLabel(item.languageCode)}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.languageUsage?.length && <p className="muted">Chưa có lượt nghe.</p>}</div></article></div>
-    <article className="panel"><h2>Lộ trình được chọn nhiều nhất · 24 giờ</h2><div className="log-list">{(data?.popularRoutes || []).map((item) => <div className="log-row" key={item.routeId}><span className="dot green" /><span>{item.routeName}</span><b className="listen-count">{item.selections} lượt chọn</b></div>)}{!data?.popularRoutes?.length && <p className="muted">Chưa có lượt chọn lộ trình.</p>}</div></article>
+    <div className="dashboard-grid"><article className="panel"><h2>Lượt nghe theo POI · 24 giờ</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.poiUsage?.length && <p className="muted">{emptyMessage("Chưa có dữ liệu.")}</p>}</div></article>
+      <article className="panel"><h2>Lượt nghe theo ngôn ngữ · 24 giờ</h2><div className="log-list">{(data?.languageUsage || []).map((item) => <div className="log-row" key={item.languageCode}><span className="dot green" /><span>{languageLabel(item.languageCode)}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.languageUsage?.length && <p className="muted">{emptyMessage("Chưa có lượt nghe.")}</p>}</div></article></div>
+    <article className="panel"><h2>Lộ trình được bắt đầu nhiều nhất · 24 giờ</h2><div className="log-list">{(data?.popularRoutes || []).map((item) => <div className="log-row" key={item.routeId}><span className="dot green" /><span>{item.routeName}</span><b className="listen-count">{item.selections} lượt bắt đầu</b></div>)}{!data?.popularRoutes?.length && <p className="muted">{emptyMessage("Chưa có lượt bắt đầu lộ trình.")}</p>}</div></article>
   </section>;
 }
 

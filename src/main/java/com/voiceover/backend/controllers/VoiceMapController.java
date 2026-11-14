@@ -163,6 +163,6 @@ public class VoiceMapController {
     // UC11: Giám sát hệ thống và thống kê sử dụng thực tế (Cập nhật <= 10s, quy ước Xanh/Vàng/Đỏ)
     @GetMapping("/admin/monitoring/dashboard")
     public ResponseEntity<?> getMonitoringDashboard() {
-        return ResponseEntity.ok(monitoringService.dashboard());
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(monitoringService.dashboard());
     }
 }

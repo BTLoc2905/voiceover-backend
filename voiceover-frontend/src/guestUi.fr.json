@@ -113,5 +113,16 @@
   "stopNavigation": "Arrêter la navigation · retour à la liste",
   "requestFailed": "Impossible de charger les données. Veuillez réessayer.",
   "narrationFailed": "Impossible de charger la narration. Veuillez réessayer.",
-  "locationUnavailable": "Votre emplacement n'est pas disponible. Vous pouvez toujours sélectionner un lieu sur la carte."
+  "locationUnavailable": "Votre emplacement n'est pas disponible. Vous pouvez toujours sélectionner un lieu sur la carte.",
+  "tapToPlay": "Touchez pour écouter",
+  "audioUnavailable": "Audio indisponible. Vous pouvez toujours lire le texte.",
+  "fallbackAudio": "L’audio dans la langue choisie est indisponible. Lecture d’un audio de secours",
+  "skipped": "Ignoré",
+  "notVisited": "Non visité",
+  "journeyCompleted": "Parcours terminé",
+  "progressNotSaved": "Impossible de sauvegarder la progression sur cet appareil. Elle reste disponible pour cette visite uniquement.",
+  "gpsDenied": "Accès à la position refusé. Vous pouvez choisir des lieux sur la carte. Activez la position dans le navigateur puis réessayez.",
+  "gpsWeak": "Signal GPS faible. Position approximative ; lecture automatique suspendue.",
+  "descriptionFallback": "Affichage de la description originale",
+  "mapUnavailable": "Impossible de charger la carte. Vérifiez votre connexion."
 }
