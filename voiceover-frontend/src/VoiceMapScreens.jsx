@@ -16,7 +16,7 @@ import { guestPoiItems, PoiDetailsLoader } from "./guestPoi.js";
 import { createPoiCard } from "./poiCard.js";
 import { advanceJourney, createJourney, restoreJourney, saveJourney } from "./routeJourney.js";
 import "./AutoNarration.css";
-import GpsDemoPanel from "./GpsDemoPanel.jsx";
+import GpsDemoPanel, { GpsDemoButton } from "./GpsDemoPanel.jsx";
 import { demoGps, guestStorage } from "./demoGps.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -204,7 +204,8 @@ function MapArtwork({ location, pois = [], controllerRef, language = "vi", route
         <button aria-label={t("zoomIn")} onClick={() => controllerRef?.current?.zoomIn()}>＋</button>
         <button aria-label={t("zoomOut")} onClick={() => controllerRef?.current?.zoomOut()}>−</button>
         <button aria-label={t("goToLocation")} disabled={!location} onClick={() => controllerRef?.current?.locate()}>◎</button>
-        {fitAllPois && <button aria-label={t("showAllPlaces")} title={t("showAllPlaces")} onClick={() => controllerRef?.current?.showPois()}>▦</button>}
+        <button aria-label={t("showAllPlaces")} title={t("showAllPlaces")} onClick={() => controllerRef?.current?.showPois()}>▦</button>
+        <GpsDemoButton />
       </div>
     </div>
   );
@@ -384,7 +385,7 @@ export default function VoiceMapScreens() {
     }
   };
   return <div className="demo-shell tourist-shell" lang={language}><div className="tourist-frame">
-    <GpsDemoPanel pois={journey ? journey.pois.slice(journey.index) : catalog} />
+    <GpsDemoPanel pois={journey ? journey.pois.slice(journey.index) : catalog}>
     {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError ? guestText(language, "requestFailed") : ""}
       gpsError={gpsError} retryGps={retryGps} retryCatalog={() => { setLoading(true); setCatalogAttempt(value => value + 1); }} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
     {screen === "audio" && <NarrationAudioScreen player={player} playback={playback} setScreen={navigate} location={location} pois={mapPois} language={language} onLanguageChange={changeLanguage} backScreen={audioBackScreen} MapComponent={MapArtwork} formatPoiName={localizedPoiName} />}
@@ -402,5 +403,6 @@ export default function VoiceMapScreens() {
       onProgress={(index, outcome) => setJourney((current) => advanceJourney(current, index, outcome))}
       onAudio={(id) => navigate("audio", id, "journey")}
       onExit={() => { setJourney(null); setScreen("route"); }} />}
+    </GpsDemoPanel>
   </div></div>;
 }

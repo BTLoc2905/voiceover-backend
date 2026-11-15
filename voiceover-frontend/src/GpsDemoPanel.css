@@ -1,9 +1,21 @@
-.gps-demo { position: fixed; top: 10px; left: 10px; z-index: 2500; width: min(310px, calc(100vw - 20px)); max-height: 70dvh; overflow: auto; background: #fff8db; color: #49330b; border: 2px solid #b77900; border-radius: 12px; padding: 8px; font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 3px 14px #0002; }
-.gps-demo summary { cursor: pointer; font-weight: 750; padding: 5px; }
-.gps-demo details p { margin: 8px 0; }
+.tourist-frame { position: relative; }
+.gps-demo-toggle { position: relative; display: grid; place-items: center; padding: 0; cursor: pointer; }
+.gps-demo-toggle svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.gps-demo-toggle.is-active { color: #8a5700; }
+.gps-demo-indicator { position: absolute; right: 4px; bottom: 4px; width: 6px; height: 6px; border: 1px solid #fff; border-radius: 50%; background: #e69b00; }
+.gps-demo-toggle:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.route-journey .journey-gps-demo-button { position: absolute; z-index: 1001; top: 148px; right: 10px; width: 40px; height: 40px; border: 1px solid #dce4ee; border-radius: 10px; background: #fffffff2; box-shadow: 0 3px 8px #0f172a30; }
+.gps-demo { box-sizing: border-box; width: min(360px, calc(100vw - 24px)); max-height: 80dvh; overflow: auto; padding: 16px; color: #49330b; background: #fffdf4; border: 1px solid #d6bc72; border-radius: 16px; font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 12px 50px #0003; }
+.gps-demo::backdrop { background: #0f172a55; }
+.gps-demo-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gps-demo-heading h2 { margin: 0; font-size: 18px; }
+.gps-demo-heading button { flex: none; width: 36px; font-size: 24px; }
+.gps-demo-status { font-weight: 700; }
 .gps-demo label { display: block; margin: 6px 0; }
 .gps-demo input, .gps-demo select { display: block; box-sizing: border-box; width: 100%; min-height: 36px; color: #222; background: #fff; border: 1px solid #a58c56; border-radius: 6px; padding: 5px; }
 .gps-demo button { min-height: 36px; margin: 3px 4px 3px 0; border: 1px solid #a58c56; border-radius: 6px; padding: 6px 9px; background: white; color: #49330b; cursor: pointer; }
 .gps-demo button:disabled { opacity: .5; cursor: default; }
 .gps-demo small { display: block; }
-.gps-demo .gps-demo-off { background: #49330b; color: white; }
+.gps-demo .gps-demo-off { margin-top: 12px; background: #49330b; color: white; }
+.gps-demo-map-status { position: absolute; z-index: 1500; top: 10px; left: 10px; max-width: calc(100% - 84px); margin: 0; padding: 8px 10px; color: #49330b; background: #fff8db; border: 1px solid #d6bc72; border-radius: 9px; font-size: 12px; }
+.gps-demo-map-status button { margin-left: 6px; padding: 4px 6px; color: inherit; background: white; border: 1px solid #a58c56; border-radius: 5px; }
