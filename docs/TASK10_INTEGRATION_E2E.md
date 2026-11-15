@@ -28,7 +28,7 @@ The suite is `voiceover-frontend/e2e/task10.e2e.mjs`; run it with `E2E_MYSQL_PAS
 - **A — Admin content:** browser login → draft POI → vi/en pipeline → review → publish → guest map/audio. PASS.
 - **B — Guest visit:** map/GPS → POI → personal route confirmation → start → audio → VISITED/SKIPPED → complete. PASS.
 - **C — Monitoring:** actual browser playback and route-start events → MySQL rows → Dashboard counters within 10 seconds. PASS. In the isolated run the dashboard shows one automatic listen and one route start, matching one `AUTO_PLAY` and one `ROUTE_SELECTED` row.
-- **Errors tested:** denied/weak GPS, blocked autoplay without false listen count, failed POI API request and retry, invalid localStorage, TTS failure/retry, source edit causing STALE translation, Directions 503, missing selected-language audio fallback, Dashboard 503 and recovery, unauthenticated Monitoring 401. The Dashboard 503 is browser interception; MySQL itself was not stopped.
+- **Errors tested:** denied/weak GPS, GPS fix expiry after signal loss and recovery on a new fix, blocked autoplay without false listen count, failed POI API request and retry, invalid localStorage, TTS failure/retry, source edit causing STALE translation, Directions 503, missing selected-language audio fallback, Dashboard 503 and recovery, unauthenticated Monitoring 401. Browser GPS and Dashboard 503 are simulated; MySQL itself was not stopped.
 - **Responsive:** 320px, 390px, 768px guest map; no document horizontal overflow.
 
 ## Automated test results
@@ -39,12 +39,12 @@ The suite is `voiceover-frontend/e2e/task10.e2e.mjs`; run it with `E2E_MYSQL_PAS
 | Frontend `node --test src/*.test.js` | 69 pass, 0 fail, 0 skipped | Vite production build also passed. |
 | Python worker `unittest` | 7 pass | Worker dependencies installed in a local virtual environment. |
 | MySQL integration | 16 pass, 0 fail, 0 skipped | Four opt-in integration classes executed on isolated MySQL 8.4. |
-| Playwright browser + MySQL | 9 pass, 0 fail, 0 skipped | Includes the parent test and eight named subtests. |
+| Playwright browser + MySQL | 10 pass, 0 fail, 0 skipped | Includes the parent test and nine named subtests, including GPS signal loss/recovery. |
 
-Raw local logs: `docs/task10-evidence/logs/`. Browser screenshots: `docs/task10-evidence/`. CI run and exact commit SHA will be linked from the PR after GitHub Actions finishes.
+Raw logs from the original local run: `docs/task10-evidence/logs/`. Browser screenshots: `docs/task10-evidence/`. The updated CI run on commit `b192cdf` passed [all five jobs](https://github.com/BTLoc2905/voiceover-backend/actions/runs/43708136351), including the MySQL integration report check and the new E2E case. This report/workflow follow-up commit requires its own CI run; use the latest successful check on [PR #36](https://github.com/BTLoc2905/voiceover-backend/pull/36) as final release evidence. CI now uploads screenshots as an artifact on both success and failure.
 
 ## Bugs and limitations
 
-No application defect of high or critical severity was reproduced in the three main flows. The initial E2E run exposed only test locator/stale-page issues; those were corrected in the test. No production code was changed for those issues.
+No application defect of high or critical severity was reproduced in the three main flows. The initial E2E run exposed only test locator/stale-page issues; those were corrected in the test. No production code was changed for those issues. The browser coverage gap for GPS signal loss was closed in PR #36 (test-only, low severity).
 
-NOT TESTED on a physical phone: outdoor GPS quality, actual walking distance/ETA, mobile browser audio policy and signal loss. NOT TESTED against external Google Translation, real TTS or OSRM services; local HTTP providers were used for deterministic integration. A real MySQL outage and off-route recovery were not exercised in this browser suite; API error handling and off-route logic have separate automated coverage. These limits must be cleared before claiming field acceptance.
+NOT TESTED on a physical phone: outdoor GPS quality, actual walking distance/ETA, mobile browser audio policy and signal loss. NOT TESTED in this E2E suite against external Google Translation, real TTS or OSRM services; local HTTP providers were used for deterministic integration. A separate [Staging CD smoke run](https://github.com/BTLoc2905/voiceover-backend/actions/runs/43706479962) exercised live Edge TTS, but does not replace the full content pipeline E2E. A real MySQL outage and off-route recovery were not exercised in this browser suite; API error handling and off-route logic have separate automated coverage. These limits must be cleared before claiming field acceptance.
