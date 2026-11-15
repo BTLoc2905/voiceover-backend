@@ -1,0 +1,9 @@
+.gps-demo { position: fixed; top: 10px; left: 10px; z-index: 2500; width: min(310px, calc(100vw - 20px)); max-height: 70dvh; overflow: auto; background: #fff8db; color: #49330b; border: 2px solid #b77900; border-radius: 12px; padding: 8px; font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 3px 14px #0002; }
+.gps-demo summary { cursor: pointer; font-weight: 750; padding: 5px; }
+.gps-demo details p { margin: 8px 0; }
+.gps-demo label { display: block; margin: 6px 0; }
+.gps-demo input, .gps-demo select { display: block; box-sizing: border-box; width: 100%; min-height: 36px; color: #222; background: #fff; border: 1px solid #a58c56; border-radius: 6px; padding: 5px; }
+.gps-demo button { min-height: 36px; margin: 3px 4px 3px 0; border: 1px solid #a58c56; border-radius: 6px; padding: 6px 9px; background: white; color: #49330b; cursor: pointer; }
+.gps-demo button:disabled { opacity: .5; cursor: default; }
+.gps-demo small { display: block; }
+.gps-demo .gps-demo-off { background: #49330b; color: white; }

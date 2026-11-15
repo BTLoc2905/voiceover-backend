@@ -2,10 +2,11 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { AutoNarration, distanceMeters, goodFix } from "./autoNarration.js";
 import { NarrationPlayer } from "./narrationPlayer.js";
 import { anonymousClientId, getGuide, GuidePreloader, recordPlaybackEvent } from "./narrationApi.js";
+import { guestStorage } from "./demoGps.js";
 
 function createRuntime() {
   let storage;
-  try { storage = window.localStorage; } catch { /* Use memory if storage is blocked. */ }
+  try { storage = guestStorage(); } catch { /* Use memory if storage is blocked. */ }
   const engine = new AutoNarration({ storage });
   const clientId = anonymousClientId();
   const preloader = new GuidePreloader();

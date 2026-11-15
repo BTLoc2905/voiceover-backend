@@ -1,4 +1,5 @@
 const API_BASE = import.meta.env?.VITE_API_URL || "";
+import { GPS_DEMO_ACTIVE, guestStorage, sendGuestEvent } from "./demoGps.js";
 let cachedClientId;
 let cachedAppOpenId;
 let appOpenRequest;
@@ -7,14 +8,15 @@ export function anonymousClientId() {
   if (cachedClientId) return cachedClientId;
   const key = "voicemap-anonymous-client-id";
   let id;
-  try { id = localStorage.getItem(key); } catch { /* Private browsing can disable storage. */ }
+  try { id = guestStorage().getItem(key); } catch { /* Private browsing can disable storage. */ }
   if (id && id.length <= 64) return (cachedClientId = id);
   id = globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  try { localStorage.setItem(key, id); } catch { /* The current visit still has an ID. */ }
+  try { guestStorage().setItem(key, id); } catch { /* The current visit still has an ID. */ }
   return (cachedClientId = id);
 }
 
 export function recordAppOpen() {
+  if (GPS_DEMO_ACTIVE) return Promise.resolve({ recorded: false, demo: true });
   if (appOpenRequest) return appOpenRequest;
   const key = "voicemap-app-open-id";
   let openId = cachedAppOpenId;
@@ -59,9 +61,11 @@ export async function getGuide(poiId, language, signal) {
 }
 
 export async function recordPlaybackEvent(event, clientId) {
+  return sendGuestEvent(GPS_DEMO_ACTIVE, async () => {
   const response = await fetch(`${API_BASE}/api/public/playback-events`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...event, clientId }), keepalive: true });
   if (!response.ok) throw new Error("Không ghi được sự kiện nghe.");
+  });
 }
 
 /** Preload nearby files with at most 3 concurrent requests; never record a listen. */

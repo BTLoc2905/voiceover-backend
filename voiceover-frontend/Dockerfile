@@ -8,6 +8,8 @@ COPY . .
 
 # Frontend gọi API qua cùng địa chỉ với Nginx
 ENV VITE_API_URL=""
+ARG VITE_GPS_DEMO=false
+ENV VITE_GPS_DEMO=${VITE_GPS_DEMO}
 RUN npm run build
 
 FROM nginx:stable-alpine
