@@ -1,0 +1,148 @@
+name: VoiceMap Staging CD
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - .github/workflows/deploy.yml
+      - Dockerfile
+      - compose.yaml
+      - compose.staging.yaml
+      - requirements-edge-tts.txt
+      - scripts/deploy/**
+      - voiceover-frontend/Dockerfile
+      - voiceover-frontend/nginx.conf
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate-compose:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      FRONTEND_PORT: '8088'
+      MYSQL_DATABASE: voicemap_cd_validation
+      MYSQL_USER: voicemap_cd
+      TTS_PROVIDER: edge
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate disposable CI database credentials
+        run: |
+          echo "MYSQL_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "MYSQL_ROOT_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+      - name: Test release gate and rollback policy
+        run: python3 -m unittest discover -s scripts/deploy -p 'test_*.py' -v
+      - name: Check Bash and merged Staging Compose syntax
+        env:
+          BACKEND_IMAGE: ghcr.io/example/voicemap-backend:sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          FRONTEND_IMAGE: ghcr.io/example/voicemap-frontend:sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        run: |
+          bash -n scripts/deploy/smoke.sh
+          docker compose -f compose.yaml -f compose.staging.yaml config --quiet
+      - name: Build both Docker images
+        run: docker compose build backend frontend
+      - name: Start disposable Compose stack
+        run: docker compose up -d --no-build --wait --wait-timeout 240
+      - name: Run basic container and database smoke
+        run: bash scripts/deploy/smoke.sh basic
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=100
+      - name: Stop disposable containers without deleting volumes
+        if: always()
+        run: docker compose stop
+
+  verify-release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require exact develop push CI and approved Staging configuration
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/deploy/verify_release.py
+
+  publish-images:
+    needs: verify-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Normalize GHCR owner
+        id: names
+        shell: bash
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish Backend SHA image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ghcr.io/${{ steps.names.outputs.owner }}/voicemap-backend:sha-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+      - name: Build and publish Frontend SHA image
+        uses: docker/build-push-action@v6
+        with:
+          context: voiceover-frontend
+          file: voiceover-frontend/Dockerfile
+          push: true
+          tags: ghcr.io/${{ steps.names.outputs.owner }}/voicemap-frontend:sha-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+
+  deploy-staging:
+    needs: publish-images
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: voicemap-staging-deployment
+      cancel-in-progress: false
+    env:
+      STAGING_HOST: ${{ secrets.STAGING_HOST }}
+      STAGING_USER: ${{ secrets.STAGING_USER }}
+      STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+      STAGING_HOST_KEY: ${{ secrets.STAGING_HOST_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned SSH identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$STAGING_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
+          [[ "$STAGING_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]
+          test -n "$STAGING_SSH_KEY"
+          test -n "$STAGING_HOST_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$STAGING_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$STAGING_HOST_KEY" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+      - name: Verify server is provisioned
+        run: >-
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes
+          "$STAGING_USER@$STAGING_HOST"
+          'test -d /opt/voicemap && test -f /opt/voicemap/.env && test -f /opt/voicemap/.env.smoke'
+      - name: Copy reviewed Compose and deployment scripts
+        run: >-
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes
+          compose.yaml compose.staging.yaml scripts/deploy/staging.py scripts/deploy/smoke.sh
+          "$STAGING_USER@$STAGING_HOST:/opt/voicemap/"
+      - name: Deploy SHA images and run full Staging smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          backend="ghcr.io/$owner/voicemap-backend:sha-$GITHUB_SHA"
+          frontend="ghcr.io/$owner/voicemap-frontend:sha-$GITHUB_SHA"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$STAGING_USER@$STAGING_HOST" \
+            "python3 /opt/voicemap/staging.py deploy --backend-image $backend --frontend-image $frontend"
