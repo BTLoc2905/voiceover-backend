@@ -11,9 +11,12 @@ JOBS = ["backend-test", "frontend-test", "python-test", "mysql-integration-test"
 def fixture():
     return {
         f"repos/{REPO}/environments/staging": {
-            "protection_rules": [{"type": "required_reviewers", "prevent_self_review": True,
-                                  "reviewers": [{"type": "User"}]}],
+            "protection_rules": [],
             "deployment_branch_policy": {"custom_branch_policies": True, "protected_branches": False},
+        },
+        f"repos/{REPO}/environments/staging/deployment-branch-policies?per_page=100": {
+            "total_count": 1,
+            "branch_policies": [{"name": "develop"}],
         },
         f"repos/{REPO}/actions/workflows/maven.yml/runs?head_sha={SHA}&event=push&per_page=100": {
             "workflow_runs": [{"id": 42, "head_sha": SHA, "head_branch": "develop", "event": "push",
@@ -29,7 +32,7 @@ class VerifyReleaseTest(unittest.TestCase):
     def check(self, payload):
         return verify_release(lambda path: payload[path], REPO, SHA, "refs/heads/develop")
 
-    def test_accepts_exact_push_ci_with_all_jobs_and_reviewers(self):
+    def test_accepts_exact_push_ci_with_develop_only_and_no_reviewers(self):
         self.assertEqual(self.check(fixture()), "https://example.test/run/42")
 
     def test_rejects_ci_for_different_sha(self):
@@ -46,14 +49,20 @@ class VerifyReleaseTest(unittest.TestCase):
 
     def test_rejects_unprotected_staging(self):
         payload = fixture()
-        payload[f"repos/{REPO}/environments/staging"]["protection_rules"] = []
-        with self.assertRaisesRegex(ValueError, "required reviewers"):
+        payload[f"repos/{REPO}/environments/staging"]["deployment_branch_policy"] = None
+        with self.assertRaisesRegex(ValueError, "custom develop branch rule"):
             self.check(payload)
 
-    def test_rejects_self_review(self):
+    def test_rejects_wildcard_branch_rule(self):
         payload = fixture()
-        payload[f"repos/{REPO}/environments/staging"]["protection_rules"][0]["prevent_self_review"] = False
-        with self.assertRaisesRegex(ValueError, "self review"):
+        payload[f"repos/{REPO}/environments/staging/deployment-branch-policies?per_page=100"]["branch_policies"] = [{"name": "*"}]
+        with self.assertRaisesRegex(ValueError, "only develop"):
+            self.check(payload)
+
+    def test_rejects_additional_branch_rule(self):
+        payload = fixture()
+        payload[f"repos/{REPO}/environments/staging/deployment-branch-policies?per_page=100"]["branch_policies"].append({"name": "main"})
+        with self.assertRaisesRegex(ValueError, "only develop"):
             self.check(payload)
 
     def test_rejects_non_develop_dispatch(self):
