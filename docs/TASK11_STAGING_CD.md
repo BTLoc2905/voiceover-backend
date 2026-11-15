@@ -45,7 +45,7 @@ docker compose --env-file .env -f compose.yaml -f compose.staging.yaml logs --ta
 cat releases/current.json
 ```
 
-The PR validation job separately builds both Docker images, starts disposable MySQL/Backend/Frontend and runs `smoke.sh basic`. It checks HTTP, DB, Flyway and container health without Staging secrets or live Edge TTS. Its GitHub Actions run URL and counts should be added to the Task 11 handoff after CI completes.
+The PR validation job separately builds both Docker images, starts disposable MySQL/Backend/Frontend and runs `smoke.sh basic`. It checks HTTP, DB, Flyway and container health without Staging secrets or live Edge TTS. [Staging CD validation run 43684363022](https://github.com/BTLoc2905/voiceover-backend/actions/runs/43684363022) passed: 13 policy/rollback tests; MySQL, Backend and Frontend healthy; Frontend HTTP and public API reachable; MySQL/Flyway rank 20 and pipeline table checked. [Regular VoiceMap CI run 43684362992](https://github.com/BTLoc2905/voiceover-backend/actions/runs/43684362992) passed all five required test jobs on the same initial Task 11 commit `7a18562`.
 
 The local development machine for this task has no Docker CLI, so Docker build and container startup are verified by the PR job rather than claimed as local results.
 
@@ -74,12 +74,14 @@ This restores the exact previous SHA image refs, waits for health and re-runs th
 
 ## Acceptance status
 
+Changed files: `.github/workflows/deploy.yml`, `compose.staging.yaml`, `compose.yaml`, `.env.example`, `scripts/deploy/verify_release.py`, `scripts/deploy/staging.py`, `scripts/deploy/smoke.sh`, their Python tests, this runbook and the implementation plan. No existing test file was removed.
+
 | Check | Status |
 | --- | --- |
 | PR #26 included in source; separate Task 11 branch | PASS |
-| Release gate, SHA image/rollback policy unit tests | See CI/local test log |
-| Disposable Docker build, Compose and basic smoke | Awaiting Task 11 PR CI |
+| Release gate, SHA image/rollback policy unit tests | PASS — 13/13 locally and in PR validation |
+| Disposable Docker build, Compose and basic smoke | PASS — GitHub Actions run 43684363022, Flyway rank 20 |
 | Real Staging deployment, full smoke, backup and rollback rehearsal | NOT TESTED — no approved Staging host/configuration supplied |
 | Production deployment | NOT TESTED — outside Task 11 Staging workflow |
 
-No application code from Tasks 01–07 or existing automated tests is removed.
+Remaining deployment gaps: the group must provide a Staging host, protected GitHub Environment, SSH secrets, server `.env` files and an Admin bootstrap for a fresh database. Live translation pipeline, live TTS, backup restoration and rollback rehearsal require that approved environment. No high-severity application issue was found in the disposable Compose smoke.
