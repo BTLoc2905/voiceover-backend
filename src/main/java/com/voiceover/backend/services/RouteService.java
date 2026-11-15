@@ -214,6 +214,6 @@ public class RouteService {
         Poi origin = Poi.builder().latitude(java.math.BigDecimal.valueOf(lat)).longitude(java.math.BigDecimal.valueOf(lng)).build();
         var leg = walkingDirectionsService.calculate(List.of(origin, target));
         return Map.of("targetId", targetId, "geometry", leg.geometry(), "totalDistanceMeters", leg.distanceMeters(),
-                "estimatedDurationMinutes", (int) Math.ceil(leg.durationSeconds() / 60.0), "travelMode", "WALKING");
+                "estimatedDurationMinutes", (int) Math.ceil(leg.durationSeconds() / 60.0), "durationSeconds", leg.durationSeconds(), "travelMode", "WALKING");
     }
 }

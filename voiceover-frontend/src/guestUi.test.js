@@ -8,13 +8,15 @@ const readCatalog = (code) => JSON.parse(readFileSync(new URL(`./guestUi.${code}
 test("guest interface has complete copy for every selectable language", () => {
   const reference = readCatalog("en");
   const keys = Object.keys(reference).sort();
-  assert.equal(keys.length, 115);
+  assert.equal(keys.length, 126);
+  assert.equal(readCatalog("vi").tapToPlay, "Chạm để nghe");
   for (const { code } of LANGUAGE_OPTIONS) {
     const catalog = readCatalog(code);
     assert.deepEqual(Object.keys(catalog).sort(), keys, `Missing or extra labels for ${code}`);
     for (const [key, value] of Object.entries(catalog)) {
       assert.equal(typeof value, "string", `${code}.${key}`);
       assert.ok(value.trim(), `${code}.${key} is blank`);
+      if (["tapToPlay", "audioUnavailable", "fallbackAudio"].includes(key)) assert.ok(!value.includes("?"), `${code}.${key} has corrupted text`);
     }
   }
 });

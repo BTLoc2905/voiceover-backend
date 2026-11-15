@@ -196,6 +196,77 @@ class ContentPipelineMySqlTest {
         return Poi.builder().name("Integration " + UUID.randomUUID()).descriptionSource("Description A").sourceLanguageCode("vi")
                 .latitude(BigDecimal.TEN).longitude(BigDecimal.TEN).status("DRAFT").build();
     }
+
+    @Test void allSixteenLanguagesCompleteWithRealMySqlAndMockTranslationAndTts() throws Exception {
+        var generator = context.getBean(AudioGenerationService.class);
+        when(generator.generate(anyLong(), anyString(), anyString())).thenAnswer(call ->
+                new AudioGenerationService.GeneratedAudio("/mock-" + call.getArgument(1) + ".wav", 4));
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/translate", exchange -> {
+            String query = java.net.URLDecoder.decode(exchange.getRequestURI().getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
+            String text = query.substring(query.indexOf("&q=") + 3);
+            byte[] response = mapper.writeValueAsBytes(List.of(List.of(List.of(text))));
+            exchange.sendResponseHeaders(200, response.length); exchange.getResponseBody().write(response); exchange.close();
+        });
+        server.start();
+        try {
+            Poi poi = context.getBean(PoiService.class).saveOrUpdatePoi(newPoi());
+            var jobs = context.getBean(TranslationReviewService.class);
+            var worker = new PipelineService(jobs, generator);
+            org.springframework.test.util.ReflectionTestUtils.setField(worker, "googleCloudApiKey", "");
+            org.springframework.test.util.ReflectionTestUtils.setField(worker, "unofficialTranslationUrl", "http://127.0.0.1:" + server.getAddress().getPort() + "/translate");
+            org.springframework.test.util.ReflectionTestUtils.setField(worker, "translationTimeoutSeconds", 2);
+            var tasks = context.getBean(PipelineTaskRepository.class);
+            for (var task : tasks.findByPoiId(poi.getId())) worker.resumeTask(task.getId()).join();
+            var texts = context.getBean(TranslationRepository.class);
+            var audio = context.getBean(AudioRepository.class);
+            assertEquals(16, tasks.findByPoiId(poi.getId()).size());
+            for (String code : List.of("vi", "en", "ja", "ko", "zh-CN", "fr", "de", "es", "ru", "th", "id", "it", "pt", "ar", "ms", "hi")) {
+                assertEquals("COMPLETED", texts.findByPoiIdAndLanguageCode(poi.getId(), code).orElseThrow().getStatus(), code);
+                assertEquals("COMPLETED", audio.findByPoiIdAndLanguageCode(poi.getId(), code).orElseThrow().getStatus(), code);
+            }
+            jobs.submit(poi.getId(), "th", "Thai manually reviewed", TranslationReviewService.revision(texts.findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow()), false);
+            long thaiTask = tasks.findFirstByPoiIdAndTargetLanguageCodeOrderByIdDesc(poi.getId(), "th").orElseThrow().getId();
+            worker.resumeTask(thaiTask).join();
+            jobs.submit(poi.getId(), "th", "Thai manually reviewed", TranslationReviewService.revision(texts.findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow()), false);
+            assertEquals(17, tasks.findByPoiId(poi.getId()).size());
+            when(generator.generate(poi.getId(), "th", "Thai manually reviewed")).thenThrow(new java.io.IOException("Thai NoAudioReceived (mock)"));
+            jobs.submit(poi.getId(), "th", null, TranslationReviewService.revision(texts.findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow()), true);
+            long failedThai = tasks.findFirstByPoiIdAndTargetLanguageCodeOrderByIdDesc(poi.getId(), "th").orElseThrow().getId();
+            worker.resumeTask(failedThai).join();
+            assertEquals(3, tasks.findById(failedThai).orElseThrow().getAudioAttempts());
+            assertEquals("FAILED", audio.findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow().getStatus());
+            assertEquals("COMPLETED", texts.findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow().getStatus());
+            poi.setDescriptionSource("Changed source"); poi = context.getBean(PoiService.class).saveOrUpdatePoi(poi);
+            assertEquals("STALE", texts.findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow().getStatus());
+            int taskCount = tasks.findByPoiId(poi.getId()).size();
+            context.getBean(PoiService.class).saveOrUpdatePoi(poi);
+            assertEquals(taskCount, tasks.findByPoiId(poi.getId()).size());
+            assertEquals("Thai manually reviewed", texts.findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow().getContent());
+        } finally { server.stop(0); }
+    }
+
+    @Test void persistedAttemptBudgetIsNotResetByRestartAndCannotPublishDuplicateAudio() {
+        Poi poi = context.getBean(PoiService.class).saveOrUpdatePoi(newPoi());
+        var tasks = context.getBean(PipelineTaskRepository.class);
+        long id = tasks.findFirstByPoiIdAndTargetLanguageCodeOrderByIdDesc(poi.getId(), "th").orElseThrow().getId();
+        var jobs = context.getBean(TranslationReviewService.class);
+        var work = jobs.saveTranslation(jobs.claim(id), "Thai translated text");
+        assertEquals(1, jobs.nextAttempt(work, false)); assertEquals(2, jobs.nextAttempt(work, false));
+        transaction().executeWithoutResult(status -> {
+            var task = tasks.findById(id).orElseThrow(); task.setLeaseUntil(LocalDateTime.now().minusSeconds(5)); tasks.saveAndFlush(task);
+        });
+        context.close(); openContext();
+        jobs = context.getBean(TranslationReviewService.class); work = jobs.claim(id);
+        assertEquals("Thai translated text", work.text()); assertEquals(3, jobs.nextAttempt(work, false));
+        assertEquals(0, jobs.nextAttempt(work, false));
+        assertEquals("FAILED", context.getBean(PipelineTaskRepository.class).findById(id).orElseThrow().getStatus());
+        assertEquals("COMPLETED", context.getBean(TranslationRepository.class).findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow().getStatus());
+        assertEquals("FAILED", context.getBean(AudioRepository.class).findByPoiIdAndLanguageCode(poi.getId(), "th").orElseThrow().getStatus());
+        assertFalse(jobs.complete(work, new AudioGenerationService.GeneratedAudio("/late-thai.wav", 4)));
+        assertEquals(1, context.getBean(AudioRepository.class).findByPoiId(poi.getId()).stream().filter(a -> "th".equals(a.getLanguageCode())).count());
+    }
     private static String env(String name, String fallback) { String value = System.getenv(name); return value == null ? fallback : value; }
     private static TransactionTemplate transaction() { return new TransactionTemplate(context.getBean(PlatformTransactionManager.class)); }
 
@@ -229,6 +300,7 @@ class ContentPipelineMySqlTest {
         @Bean AudioGenerationService generator() {
             AudioGenerationService generator = mock(AudioGenerationService.class);
             when(generator.supportsLanguage(anyString())).thenReturn(true);
+            when(generator.hasUsableFile(anyString())).thenReturn(true);
             return generator;
         }
         @Bean CommittedEvents committedEvents() { return new CommittedEvents(); }
@@ -239,7 +311,7 @@ class ContentPipelineMySqlTest {
         }
         @Bean PoiService poiService(PoiRepository pois, LanguageRepository languages, TranslationRepository translations,
                 AudioRepository audios, RouteStopRepository stops, TranslationReviewService jobs) {
-            return new PoiService(pois, translations, audios, languages, stops, jobs, mock(PoiThumbnailService.class));
+            return new PoiService(pois, translations, audios, languages, stops, jobs, mock(PoiThumbnailService.class), mock(AudioGenerationService.class));
         }
     }
 }

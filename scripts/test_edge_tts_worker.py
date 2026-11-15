@@ -15,6 +15,22 @@ import edge_tts_worker as worker
 
 
 class EdgeTtsWorkerTest(unittest.TestCase):
+    def test_java_owned_attempt_is_not_retried_inside_python(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "one.mp3"
+
+            async def save(filename):
+                Path(filename).write_bytes(b"partial")
+                raise NoAudioReceived("Thai temporarily unavailable")
+
+            with patch.object(worker.edge_tts, "Communicate", return_value=SimpleNamespace(save=save)) as communicate, \
+                    patch.object(worker.asyncio, "sleep", new_callable=AsyncMock) as sleep:
+                with self.assertRaises(NoAudioReceived):
+                    asyncio.run(worker.synthesize("ทดสอบ", "th-TH-PremwadeeNeural", output, 1))
+            self.assertEqual(communicate.call_count, 1)
+            sleep.assert_not_awaited()
+            self.assertFalse(output.exists())
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

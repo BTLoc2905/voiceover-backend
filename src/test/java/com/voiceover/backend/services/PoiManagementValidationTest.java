@@ -19,7 +19,7 @@ class PoiManagementValidationTest {
     private final LanguageRepository languages = mock(LanguageRepository.class);
     private final TranslationReviewService pipeline = mock(TranslationReviewService.class);
     private final PoiService service = new PoiService(pois, mock(TranslationRepository.class), mock(AudioRepository.class),
-            languages, mock(RouteStopRepository.class), pipeline, mock(PoiThumbnailService.class));
+            languages, mock(RouteStopRepository.class), pipeline, mock(PoiThumbnailService.class), mock(AudioGenerationService.class));
 
     private Poi validPoi() {
         return Poi.builder().name("  Tháp thử nghiệm  ").descriptionSource("  Nội dung mô tả  ")

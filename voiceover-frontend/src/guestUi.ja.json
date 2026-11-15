@@ -113,5 +113,16 @@
   "stopNavigation": "ナビゲーションを停止 · リストに戻る",
   "requestFailed": "データをロードできませんでした。もう一度試してください。",
   "narrationFailed": "ナレーションを読み込めませんでした。もう一度試してください。",
-  "locationUnavailable": "現在地が利用できません。地図上の場所を選択することもできます。"
+  "locationUnavailable": "現在地が利用できません。地図上の場所を選択することもできます。",
+  "tapToPlay": "タップして聴く",
+  "audioUnavailable": "音声を利用できません。解説文は読むことができます。",
+  "fallbackAudio": "選択した言語の音声を利用できないため、代替音声を使用しています",
+  "skipped": "スキップ済み",
+  "notVisited": "未訪問",
+  "journeyCompleted": "ルート終了",
+  "progressNotSaved": "この端末に進行状況を保存できません。今回の利用中のみ保持されます。",
+  "gpsDenied": "位置情報が拒否されました。地図から地点を選べます。ブラウザ設定で位置情報を許可して再試行してください。",
+  "gpsWeak": "GPS信号が弱いため位置は概算です。自動音声再生を一時停止しています。",
+  "descriptionFallback": "元の説明を表示しています",
+  "mapUnavailable": "地図を読み込めません。ネットワーク接続を確認してください。"
 }

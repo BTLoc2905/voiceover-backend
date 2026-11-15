@@ -166,7 +166,7 @@ class PoiHiddenMySqlTest {
         @Bean PoiService poiService(PoiRepository pois, TranslationRepository translations,
                 AudioRepository audios, LanguageRepository languages, RouteStopRepository stops) {
             return new PoiService(pois, translations, audios, languages, stops,
-                    mock(TranslationReviewService.class), mock(PoiThumbnailService.class));
+                    mock(TranslationReviewService.class), mock(PoiThumbnailService.class), mock(AudioGenerationService.class));
         }
     }
 }
