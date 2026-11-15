@@ -85,9 +85,10 @@ compose exec -T backend sh -ec '
   tmp="$(mktemp -d)"
   trap "rm -rf \"$tmp\"" EXIT
   printf "Kiểm tra giọng nói VoiceMap.\n" > "$tmp/input.txt"
+  # The live Edge service can return no audio transiently; use bounded worker retries.
   /opt/edge-tts/bin/python /app/scripts/edge_tts_worker.py \
     --input "$tmp/input.txt" --output "$tmp/output.mp3" \
-    --voice vi-VN-HoaiMyNeural --attempts 1 >/dev/null
+    --voice vi-VN-HoaiMyNeural --attempts 3 >/dev/null
   test -s "$tmp/output.mp3"
 '
 echo 'PASS: live Edge TTS generated audio in a temporary file'
