@@ -1,0 +1,12 @@
+test_cli_exhaustion_has_distinct_exit_code_and_no_success_json (test_edge_tts_worker.EdgeTtsWorkerTest.test_cli_exhaustion_has_distinct_exit_code_and_no_success_json) ... ok
+test_cli_stdout_contains_only_success_metadata (test_edge_tts_worker.EdgeTtsWorkerTest.test_cli_stdout_contains_only_success_metadata) ... ok
+test_configuration_errors_are_not_retried (test_edge_tts_worker.EdgeTtsWorkerTest.test_configuration_errors_are_not_retried) ... ok
+test_exhaustion_is_bounded_and_removes_partial_file (test_edge_tts_worker.EdgeTtsWorkerTest.test_exhaustion_is_bounded_and_removes_partial_file) ... ok
+test_invalid_mp3_is_not_reported_as_success (test_edge_tts_worker.EdgeTtsWorkerTest.test_invalid_mp3_is_not_reported_as_success) ... ok
+test_java_owned_attempt_is_not_retried_inside_python (test_edge_tts_worker.EdgeTtsWorkerTest.test_java_owned_attempt_is_not_retried_inside_python) ... ok
+test_transient_failures_restart_complete_text_with_same_voice (test_edge_tts_worker.EdgeTtsWorkerTest.test_transient_failures_restart_complete_text_with_same_voice) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.053s
+
+OK
