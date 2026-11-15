@@ -1,0 +1,154 @@
+Picked up JAVA_TOOL_OPTIONS: -javaagent:C:\Users\thanh\.m2\repository\net\bytebuddy\byte-buddy-agent\1.18.11\byte-buddy-agent-1.18.11.jar
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------< com.voiceover:voiceover-backend >-------------------
+[INFO] Building voiceover-backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ voiceover-backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 20 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ voiceover-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ voiceover-backend ---
+[INFO] skip non existing resourceDirectory C:\CNPM\voiceover-backend\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ voiceover-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ voiceover-backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+Picked up JAVA_TOOL_OPTIONS: -javaagent:C:\Users\thanh\.m2\repository\net\bytebuddy\byte-buddy-agent\1.18.11\byte-buddy-agent-1.18.11.jar
+[INFO] Running com.voiceover.backend.config.AdminSessionInterceptorTest
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.235 s -- in com.voiceover.backend.config.AdminSessionInterceptorTest
+[INFO] Running com.voiceover.backend.controllers.AiDescriptionRemovalTest
+10:28:59.909 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:28:59.912 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:28:59.916 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 3 ms
+10:28:59.966 [main] WARN org.springframework.web.servlet.PageNotFound -- No mapping for POST /api/admin/pois/1/ai-description
+10:28:59.974 [main] WARN org.springframework.web.servlet.PageNotFound -- No endpoint POST /api/admin/pois/1/ai-description.
+10:28:59.982 [main] WARN org.springframework.web.servlet.PageNotFound -- No mapping for GET /api/admin/pois/1/ai-description/latest
+10:28:59.982 [main] WARN org.springframework.web.servlet.PageNotFound -- No endpoint GET /api/admin/pois/1/ai-description/latest.
+10:28:59.982 [main] WARN org.springframework.web.servlet.PageNotFound -- No mapping for PUT /api/admin/pois/1/ai-description/drafts/1
+10:28:59.982 [main] WARN org.springframework.web.servlet.PageNotFound -- No endpoint PUT /api/admin/pois/1/ai-description/drafts/1.
+10:28:59.982 [main] WARN org.springframework.web.servlet.PageNotFound -- No mapping for POST /api/admin/pois/1/ai-description/drafts/1/accept
+10:28:59.982 [main] WARN org.springframework.web.servlet.PageNotFound -- No endpoint POST /api/admin/pois/1/ai-description/drafts/1/accept.
+10:28:59.984 [main] WARN org.springframework.web.servlet.PageNotFound -- No mapping for POST /api/admin/pois/1/ai-description/drafts/1/discard
+10:28:59.984 [main] WARN org.springframework.web.servlet.PageNotFound -- No endpoint POST /api/admin/pois/1/ai-description/drafts/1/discard.
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.638 s -- in com.voiceover.backend.controllers.AiDescriptionRemovalTest
+[INFO] Running com.voiceover.backend.controllers.MonitoringAccessTest
+10:29:00.151 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:00.151 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:00.152 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+10:29:00.314 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:00.314 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:00.315 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+10:29:00.344 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:00.345 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:00.345 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+10:29:00.461 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:00.461 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:00.461 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.464 s -- in com.voiceover.backend.controllers.MonitoringAccessTest
+[INFO] Running com.voiceover.backend.controllers.PlaybackEventControllerTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.428 s -- in com.voiceover.backend.controllers.PlaybackEventControllerTest
+[INFO] Running com.voiceover.backend.controllers.RouteAdminAuthenticationTest
+10:29:01.251 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.251 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.252 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.522 s -- in com.voiceover.backend.controllers.RouteAdminAuthenticationTest
+[INFO] Running com.voiceover.backend.controllers.RoutesControllerTest
+10:29:01.460 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.460 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.460 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+10:29:01.554 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.554 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.554 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+10:29:01.579 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.580 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.580 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+10:29:01.596 [main] WARN org.springframework.web.servlet.PageNotFound -- No mapping for GET /api/admin/sessions
+10:29:01.597 [main] WARN org.springframework.web.servlet.PageNotFound -- No endpoint GET /api/admin/sessions.
+10:29:01.610 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.610 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.611 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+10:29:01.635 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.635 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.635 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.199 s -- in com.voiceover.backend.controllers.RoutesControllerTest
+[INFO] Running com.voiceover.backend.controllers.TranslationReviewControllerTest
+10:29:01.766 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.766 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.766 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+10:29:01.801 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:01.801 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:01.801 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.177 s -- in com.voiceover.backend.controllers.TranslationReviewControllerTest
+[INFO] Running com.voiceover.backend.services.ApiRequestMetricsTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.128 s -- in com.voiceover.backend.services.ApiRequestMetricsTest
+[INFO] Running com.voiceover.backend.services.AudioGenerationServiceEdgeLiveTest
+[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0.001 s -- in com.voiceover.backend.services.AudioGenerationServiceEdgeLiveTest
+[INFO] Running com.voiceover.backend.services.AudioGenerationServiceTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.215 s -- in com.voiceover.backend.services.AudioGenerationServiceTest
+[INFO] Running com.voiceover.backend.services.ContentPipelineMySqlTest
+[WARNING] Tests run: 9, Failures: 0, Errors: 0, Skipped: 9, Time elapsed: 0.003 s -- in com.voiceover.backend.services.ContentPipelineMySqlTest
+[INFO] Running com.voiceover.backend.services.MonitoringServiceTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.588 s -- in com.voiceover.backend.services.MonitoringServiceTest
+[INFO] Running com.voiceover.backend.services.MonitoringUsageMySqlTest
+[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0 s -- in com.voiceover.backend.services.MonitoringUsageMySqlTest
+[INFO] Running com.voiceover.backend.services.PipelineDispatcherTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.078 s -- in com.voiceover.backend.services.PipelineDispatcherTest
+[INFO] Running com.voiceover.backend.services.PipelineServiceTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.177 s -- in com.voiceover.backend.services.PipelineServiceTest
+[INFO] Running com.voiceover.backend.services.PoiGuideReviewTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.178 s -- in com.voiceover.backend.services.PoiGuideReviewTest
+[INFO] Running com.voiceover.backend.services.PoiHiddenMySqlTest
+[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0.001 s -- in com.voiceover.backend.services.PoiHiddenMySqlTest
+[INFO] Running com.voiceover.backend.services.PoiJsonContractTest
+10:29:08.393 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+10:29:08.394 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+10:29:08.394 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.173 s -- in com.voiceover.backend.services.PoiJsonContractTest
+[INFO] Running com.voiceover.backend.services.PoiManagementValidationTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.077 s -- in com.voiceover.backend.services.PoiManagementValidationTest
+[INFO] Running com.voiceover.backend.services.PoiRouteProtectionTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.048 s -- in com.voiceover.backend.services.PoiRouteProtectionTest
+[INFO] Running com.voiceover.backend.services.PoiThumbnailServiceTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.172 s -- in com.voiceover.backend.services.PoiThumbnailServiceTest
+[INFO] Running com.voiceover.backend.services.ProtectedTermsTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.voiceover.backend.services.ProtectedTermsTest
+[INFO] Running com.voiceover.backend.services.RouteIndependenceMySqlTest
+[WARNING] Tests run: 3, Failures: 0, Errors: 0, Skipped: 3, Time elapsed: 0 s -- in com.voiceover.backend.services.RouteIndependenceMySqlTest
+[INFO] Running com.voiceover.backend.services.RoutePublicationTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.135 s -- in com.voiceover.backend.services.RoutePublicationTest
+[INFO] Running com.voiceover.backend.services.RouteServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.043 s -- in com.voiceover.backend.services.RouteServiceTest
+[INFO] Running com.voiceover.backend.services.TranslationReviewServiceTest
+[INFO] Tests run: 25, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.238 s -- in com.voiceover.backend.services.TranslationReviewServiceTest
+[INFO] Running com.voiceover.backend.services.WalkingDirectionsServiceTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.088 s -- in com.voiceover.backend.services.WalkingDirectionsServiceTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 147, Failures: 0, Errors: 0, Skipped: 18
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.5.1:jar (default-jar) @ voiceover-backend ---
+[INFO] 
+[INFO] --- spring-boot:4.1.1:repackage (repackage) @ voiceover-backend ---
+[INFO] Replacing main artifact C:\CNPM\voiceover-backend\target\voiceover-backend-0.0.1-SNAPSHOT.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+[INFO] The original artifact has been renamed to C:\CNPM\voiceover-backend\target\voiceover-backend-0.0.1-SNAPSHOT.jar.original
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  18.850 s
+[INFO] Finished at: 2026-11-15T10:29:11+07:00
+[INFO] ------------------------------------------------------------------------
