@@ -44,4 +44,22 @@ class MonitoringAccessTest {
                 .andExpect(jsonPath("$.activeUsers").value(3)).andExpect(jsonPath("$.pipelineCompleted").value(8))
                 .andExpect(header().string("Cache-Control", "no-store"));
     }
+
+    @Test void existingAdminSessionGetsDatabaseUnavailableWithoutLeakingMonitoringData() throws Exception {
+        when(accounts.findById(7L)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("offline"));
+        var mvc = MockMvcBuilders.standaloneSetup(controller).addInterceptors(new AdminSessionInterceptor(accounts)).build();
+        mvc.perform(get("/api/admin/monitoring/dashboard").session(session("ADMIN")))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DATABASE_UNAVAILABLE"));
+        verifyNoInteractions(monitoring);
+    }
+
+    @Test void failedJpaTransactionAlsoReturnsDatabaseUnavailable() throws Exception {
+        when(accounts.findById(7L)).thenThrow(new org.springframework.transaction.CannotCreateTransactionException("offline"));
+        var mvc = MockMvcBuilders.standaloneSetup(controller).addInterceptors(new AdminSessionInterceptor(accounts)).build();
+        mvc.perform(get("/api/admin/monitoring/dashboard").session(session("ADMIN")))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DATABASE_UNAVAILABLE"));
+        verifyNoInteractions(monitoring);
+    }
 }

@@ -11,18 +11,18 @@ export function startDashboardPolling({ load, onData, onError, onLoading,
     current = controller;
     onLoading(true);
     let finished = false;
-    const finish = () => {
+    const finish = (settled = true) => {
+      if (settled && current === controller) current = null;
       if (finished) return;
       finished = true;
       clearTimer(timeout);
-      if (current === controller) current = null;
       if (!disposed) onLoading(false);
     };
     const timeout = setTimer(() => {
       if (disposed || finished) return;
       controller.abort();
       onError("Monitoring phản hồi quá lâu. Hệ thống sẽ tự thử lại.");
-      finish();
+      finish(false);
     }, timeoutMs);
     currentTimeout = timeout;
     Promise.resolve().then(() => {
@@ -31,7 +31,7 @@ export function startDashboardPolling({ load, onData, onError, onLoading,
     }).then(data => {
       if (!disposed && !finished && !controller.signal.aborted) onData(data);
     }).catch(error => {
-      if (!disposed && !finished && !controller.signal.aborted) onError(error.message || "Monitoring tạm thời không khả dụng.");
+      if (!disposed && !finished && !controller.signal.aborted) onError(error.message || "Monitoring tạm thời không khả dụng.", error.code);
     }).finally(finish);
     return true;
   }

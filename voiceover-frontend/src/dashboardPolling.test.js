@@ -46,9 +46,10 @@ test("timeout aborts slow requests and old responses cannot overwrite the next s
   const p = setup(signal => new Promise(resolve => pending.push({ signal, resolve })));
   await flush(); p.tick(4500); await flush();
   assert.equal(pending[0].signal.aborted, true); assert.equal(p.errors.length, 1);
-  p.tick(500); await flush(); assert.equal(pending.length, 2);
-  pending[1].resolve({ fresh: true }); await flush();
+  p.tick(500); await flush(); assert.equal(pending.length, 1, "an unresolved aborted request must not overlap the next poll");
   pending[0].resolve({ old: true }); await flush();
+  p.tick(5000); await flush(); assert.equal(pending.length, 2);
+  pending[1].resolve({ fresh: true }); await flush();
   assert.deepEqual(p.data, [{ fresh: true }]); p.dispose(); assert.equal(p.count(), 0);
 });
 
@@ -57,6 +58,15 @@ test("network failures are reported and the following poll can recover", async (
   const p = setup(async () => { if (++calls === 1) throw new Error("Unavailable"); return { recovered: true }; });
   await flush(); assert.deepEqual(p.errors, ["Unavailable"]); assert.equal(p.loading.at(-1), false);
   p.tick(5000); await flush(); assert.deepEqual(p.data, [{ recovered: true }]); p.dispose();
+});
+
+test("database outage code reaches the dashboard error handler", async () => {
+  const errors = [], timer = clock();
+  const polling = startDashboardPolling({ ...timer,
+    load: async () => { const error = new Error("Database unavailable"); error.code = "DATABASE_UNAVAILABLE"; throw error; },
+    onData: () => {}, onError: (message, code) => errors.push([message, code]), onLoading: () => {},
+  });
+  await flush(); assert.deepEqual(errors, [["Database unavailable", "DATABASE_UNAVAILABLE"]]); polling.dispose();
 });
 
 test("unmount cancels timers, ignores late callbacks and supports a clean StrictMode remount", async () => {
