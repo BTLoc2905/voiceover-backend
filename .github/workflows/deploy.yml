@@ -114,6 +114,13 @@ jobs:
       STAGING_HOST_KEY: ${{ secrets.STAGING_HOST_KEY }}
     steps:
       - uses: actions/checkout@v4
+      - name: Connect to the private Staging network
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          ping: ${{ secrets.STAGING_HOST }}
       - name: Configure pinned SSH identity
         shell: bash
         run: |
