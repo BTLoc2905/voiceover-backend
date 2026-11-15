@@ -1,4 +1,4 @@
-"""Fail closed unless a reviewed staging environment and exact push CI passed."""
+"""Fail closed unless Staging targets only develop and exact push CI passed."""
 
 import json
 import os
@@ -22,14 +22,12 @@ def verify_release(get_json, repository, sha, git_ref):
 
     base = f"repos/{repository}"
     environment = get_json(f"{base}/environments/staging")
-    reviewers = [rule for rule in environment.get("protection_rules", [])
-                 if rule.get("type") == "required_reviewers" and rule.get("reviewers")]
-    if not reviewers:
-        raise ValueError("staging must have required reviewers configured")
-    if not any(rule.get("prevent_self_review") is True for rule in reviewers):
-        raise ValueError("staging must prevent self review")
-    if not environment.get("deployment_branch_policy"):
-        raise ValueError("staging must restrict deployment branches")
+    policy = environment.get("deployment_branch_policy") or {}
+    if policy.get("custom_branch_policies") is not True or policy.get("protected_branches") is not False:
+        raise ValueError("staging must use a custom develop branch rule")
+    rules = get_json(f"{base}/environments/staging/deployment-branch-policies?per_page=100")
+    if rules.get("total_count") != 1 or [rule.get("name") for rule in rules.get("branch_policies", [])] != ["develop"]:
+        raise ValueError("staging must allow only develop")
 
     runs = get_json(f"{base}/actions/workflows/maven.yml/runs?head_sha={sha}&event=push&per_page=100")
     for run in runs.get("workflow_runs", []):
