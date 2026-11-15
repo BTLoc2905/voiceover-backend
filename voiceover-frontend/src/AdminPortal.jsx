@@ -29,7 +29,11 @@ async function api(path, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (response.status === 401) window.dispatchEvent(new Event("voicemap-admin-session-expired"));
-  if (!response.ok) throw new Error(body.message || "Không thể kết nối backend.");
+  if (!response.ok) {
+    const error = new Error(body.message || "Không thể kết nối backend.");
+    error.code = body.code;
+    throw error;
+  }
   return body;
 }
 
@@ -132,6 +136,7 @@ function Login({ onLogin }) {
 function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [databaseError, setDatabaseError] = useState(false);
   const [loading, setLoading] = useState(true);
   const polling = useRef(null);
   useEffect(() => {
@@ -141,13 +146,14 @@ function Dashboard() {
         if (!value || !Number.isFinite(Date.parse(value.generatedAt))) throw new Error("Dữ liệu Monitoring không hợp lệ.");
         return value;
       },
-      onData: value => { setData(value); setError(""); },
-      onError: setError, onLoading: setLoading,
+      onData: value => { setData(value); setError(""); setDatabaseError(false); },
+      onError: (message, code) => { setError(message); setDatabaseError(code === "DATABASE_UNAVAILABLE"); },
+      onLoading: setLoading,
     });
     polling.current = instance;
     return () => { instance.dispose(); polling.current = null; };
   }, []);
-  const healthData = error ? null : data;
+  const healthData = error ? (databaseError ? { databaseStatus: "ERROR" } : null) : data;
   const emptyMessage = text => !data ? (error ? "Chưa tải được dữ liệu." : "Đang tải dữ liệu.")
     : data.dataUnavailable ? "Số liệu tạm thời không khả dụng." : text;
   const status = (value) => <span className={`health ${value === "NORMAL" ? "green" : value === "WARNING" ? "yellow" : value === "ERROR" ? "red" : "unknown"}`}>
