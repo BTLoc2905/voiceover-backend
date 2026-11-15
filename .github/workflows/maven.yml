@@ -87,11 +87,14 @@ jobs:
           PIPELINE_TEST_MYSQL_URL: jdbc:mysql://127.0.0.1:3306/?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&connectTimeout=3000
           PIPELINE_TEST_DB_USER: root
           PIPELINE_TEST_DB_PASSWORD: voiceover-ci-root
+          MONITORING_TEST_MYSQL_URL: jdbc:mysql://127.0.0.1:3306/?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&connectTimeout=3000
+          MONITORING_TEST_DB_PASSWORD: voiceover-ci-root
         run: >-
           ./mvnw -B
           -Dpoi.mysql.integration=true
           -Dpipeline.mysql.integration=true
-          -Dtest=ContentPipelineMySqlTest,PoiHiddenMySqlTest,RouteIndependenceMySqlTest
+          -Dmonitoring.mysql.integration=true
+          -Dtest=ContentPipelineMySqlTest,PoiHiddenMySqlTest,RouteIndependenceMySqlTest,MonitoringUsageMySqlTest
           test
       - name: Verify all MySQL test reports have executed tests without skips
         run: |
@@ -103,6 +106,7 @@ jobs:
               "TEST-com.voiceover.backend.services.ContentPipelineMySqlTest.xml",
               "TEST-com.voiceover.backend.services.PoiHiddenMySqlTest.xml",
               "TEST-com.voiceover.backend.services.RouteIndependenceMySqlTest.xml",
+              "TEST-com.voiceover.backend.services.MonitoringUsageMySqlTest.xml",
           }
           reports = Path("target/surefire-reports")
           for name in sorted(expected):
