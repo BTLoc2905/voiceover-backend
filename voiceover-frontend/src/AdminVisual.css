@@ -182,7 +182,7 @@
   border-top-color: #53a99a;
 }
 
-.admin-shell .session-routes .sr-create-session {
+.admin-shell .session-routes .sr-create-route {
   display: block;
   width: 100%;
   min-height: 42px;
@@ -199,7 +199,7 @@
   box-shadow: 0 4px 10px #2e65bc28;
 }
 
-.admin-shell .session-routes .sr-create-session:hover:not(:disabled) {
+.admin-shell .session-routes .sr-create-route:hover:not(:disabled) {
   background: #225ab8;
 }
 

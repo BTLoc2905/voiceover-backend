@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:e2e": "node --test e2e/task10.e2e.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -21,7 +22,10 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "bcryptjs": "^3.0.3",
+    "mysql2": "^3.24.6",
     "oxlint": "^1.88.0",
+    "playwright": "^1.65.1",
     "vite": "^8.3.4"
   }
 }

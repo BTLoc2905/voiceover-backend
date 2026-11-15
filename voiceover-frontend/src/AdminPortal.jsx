@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./AdminPortal.css";
-import SessionRoutes from "./SessionRoutes.jsx";
+import RouteManagement from "./RouteManagement.jsx";
 import TranslationReview from "./TranslationReview.jsx";
 import { languageLabel } from "./languageDisplay.js";
-import "./AiDescription.css";
 import "./AdminVisual.css";
+import { startDashboardPolling } from "./dashboardPolling.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -29,7 +29,11 @@ async function api(path, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (response.status === 401) window.dispatchEvent(new Event("voicemap-admin-session-expired"));
-  if (!response.ok) throw new Error(body.message || "Không thể kết nối backend.");
+  if (!response.ok) {
+    const error = new Error(body.message || "Không thể kết nối backend.");
+    error.code = body.code;
+    throw error;
+  }
   return body;
 }
 
@@ -132,37 +136,58 @@ function Login({ onLogin }) {
 function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const load = () => api("/api/admin/monitoring/dashboard").then((value) => { setData(value); setError(""); }).catch((reason) => setError(reason.message));
-  useEffect(() => { load(); const timer = window.setInterval(load, 10000); return () => window.clearInterval(timer); }, []);
+  const [databaseError, setDatabaseError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const polling = useRef(null);
+  useEffect(() => {
+    const instance = startDashboardPolling({
+      load: async (signal) => {
+        const value = await api("/api/admin/monitoring/dashboard", { signal });
+        if (!value || !Number.isFinite(Date.parse(value.generatedAt))) throw new Error("Dữ liệu Monitoring không hợp lệ.");
+        return value;
+      },
+      onData: value => { setData(value); setError(""); setDatabaseError(false); },
+      onError: (message, code) => { setError(message); setDatabaseError(code === "DATABASE_UNAVAILABLE"); },
+      onLoading: setLoading,
+    });
+    polling.current = instance;
+    return () => { instance.dispose(); polling.current = null; };
+  }, []);
+  const healthData = error ? (databaseError ? { databaseStatus: "ERROR" } : null) : data;
+  const emptyMessage = text => !data ? (error ? "Chưa tải được dữ liệu." : "Đang tải dữ liệu.")
+    : data.dataUnavailable ? "Số liệu tạm thời không khả dụng." : text;
   const status = (value) => <span className={`health ${value === "NORMAL" ? "green" : value === "WARNING" ? "yellow" : value === "ERROR" ? "red" : "unknown"}`}>
     {value === "NORMAL" ? "Bình thường" : value === "WARNING" ? "Cảnh báo" : value === "ERROR" ? "Lỗi" : "Chưa có dữ liệu"}</span>;
   const metric = (label, value, tone = "blue") => <div className="metric-card" key={label}><span className={`metric-icon ${tone}`}>◈</span><div><small>{label}</small><strong>{value ?? "—"}</strong></div></div>;
   return <section className="content">
-    <div className="page-heading"><div><p className="eyebrow">GIÁM SÁT & THỐNG KÊ</p><h1>Dashboard</h1><p className="muted">Dữ liệu thật, tải lại mỗi 10 giây. Thống kê sử dụng trong 24 giờ; người dùng hoạt động trong 2 phút gần nhất.</p></div>
-      <button type="button" className="secondary" onClick={load}>Làm mới</button></div>
-    {error && <div className="alert error">{error}</div>}
-    {data?.dataUnavailable && <div className="alert error">Cơ sở dữ liệu tạm thời không khả dụng; số liệu sử dụng chưa được tải.</div>}
+    <div className="page-heading"><div><p className="eyebrow">GIÁM SÁT & THỐNG KÊ</p><h1>Dashboard</h1><p className="muted">Tự cập nhật mỗi 5 giây. Thống kê sử dụng trong 24 giờ; định danh hoạt động trong 2 phút gần nhất.</p>
+      <p className="muted">Cập nhật thành công gần nhất: {data ? <time dateTime={data.generatedAt}>{new Date(data.generatedAt).toLocaleString("vi-VN")}</time> : "—"}</p>
+      {loading && <p role="status">{data ? "Đang cập nhật…" : "Đang tải dữ liệu giám sát…"}</p>}</div>
+      <button type="button" className="secondary" disabled={loading} onClick={() => polling.current?.refresh()}>Làm mới</button></div>
+    {error && <div className="alert error" role="alert">{error}{data && " Đang hiển thị số liệu của lần cập nhật trước."}</div>}
+    {data?.dataUnavailable && <div className="alert error" role="alert">Cơ sở dữ liệu tạm thời không khả dụng; số liệu sử dụng chưa được tải.</div>}
     <article className="panel monitoring-panel"><h2>Tình trạng hệ thống</h2><div className="monitoring-health">
-      <div>Ứng dụng {status(data?.applicationStatus)}</div><div>Cơ sở dữ liệu {status(data?.databaseStatus)}</div><div>Pipeline {status(data?.pipelineStatus)}</div>
+      <div>Backend {status(healthData?.applicationStatus)}</div><div>MySQL {status(healthData?.databaseStatus)}</div><div>Pipeline {status(healthData?.pipelineStatus)}</div>
     </div><p className="muted">Tỷ lệ lỗi chỉ tính phản hồi API 5xx; thời gian phản hồi là trung bình trong 5 phút gần nhất trên tiến trình backend hiện tại.</p></article>
     <div className="metric-grid">
       {metric("Tác vụ đang chờ", data?.pipelinePending)}{metric("Tác vụ đang xử lý", data?.pipelineProcessing)}
+      {metric("Tác vụ hoàn tất", data?.pipelineCompleted, "green")}
       {metric("Tác vụ lỗi", data?.pipelineFailed, "red")}{metric("Tỷ lệ lỗi API", data?.errorRatePercent == null ? null : `${data.errorRatePercent}%`, "amber")}
       {metric("Phản hồi API trung bình", data?.averageLatencyMs == null ? null : `${data.averageLatencyMs} ms`)}
     </div>
     <article className="panel monitoring-panel"><h2>Lỗi gần đây</h2><div className="log-list">
       {(data?.recentErrors || []).map((item) => <div className="log-row" key={item.id}><span className="dot error" /><span><b>{item.component}</b> · {item.message}</span><small>{new Date(item.occurredAt).toLocaleString("vi-VN")}</small></div>)}
-      {!data?.recentErrors?.length && <p className="muted">{data ? "Không ghi nhận lỗi trong 24 giờ gần đây." : "Đang tải dữ liệu."}</p>}
+      {!data?.recentErrors?.length && <p className="muted">{emptyMessage("Không ghi nhận lỗi trong 24 giờ gần đây.")}</p>}
     </div></article>
     <div className="page-heading"><div><h2>Mức sử dụng</h2><p className="muted">Các lượt nghe được ghi khi audio bắt đầu phát, không tính thao tác tải trước.</p></div></div>
     <div className="metric-grid">
-      {metric("Người dùng đang hoạt động", data?.activeUsers, "green")}{metric("Lượt nghe tự động", data?.autoListens)}
+      {metric("Định danh đang hoạt động · 2 phút", data?.activeUsers, "green")}{metric("Lượt nghe tự động", data?.autoListens)}
       {metric("Lượt nghe do chạm POI", data?.tapListens)}{metric("Tỷ lệ nghe tự động", data?.autoRatioPercent == null ? null : `${data.autoRatioPercent}%`)}
       {metric("Số POI tham quan", data?.poiCount)}{metric("Số POI đang hoạt động", data?.activePoiCount, "green")}
     </div>
-    <div className="dashboard-grid"><article className="panel"><h2>Lượt nghe theo POI · 24 giờ</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.poiUsage?.length && <p className="muted">Chưa có dữ liệu.</p>}</div></article>
-      <article className="panel"><h2>Lượt nghe theo ngôn ngữ · 24 giờ</h2><div className="log-list">{(data?.languageUsage || []).map((item) => <div className="log-row" key={item.languageCode}><span className="dot green" /><span>{languageLabel(item.languageCode)}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.languageUsage?.length && <p className="muted">Chưa có lượt nghe.</p>}</div></article></div>
-    <article className="panel"><h2>Lộ trình được chọn nhiều nhất · 24 giờ</h2><div className="log-list">{(data?.popularRoutes || []).map((item) => <div className="log-row" key={item.routeId}><span className="dot green" /><span>{item.routeName}</span><b className="listen-count">{item.selections} lượt chọn</b></div>)}{!data?.popularRoutes?.length && <p className="muted">Chưa có lượt chọn lộ trình.</p>}</div></article>
+    <div className="dashboard-grid"><article className="panel"><h2>Lượt nghe theo POI · 24 giờ</h2><div className="log-list">{(data?.poiUsage || []).map((item) => <div className="log-row" key={item.poiId}><span className="dot green" /><span>{item.poiName}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.poiUsage?.length && <p className="muted">{emptyMessage("Chưa có dữ liệu.")}</p>}</div></article>
+      <article className="panel"><h2>Lượt nghe theo ngôn ngữ · 24 giờ</h2><div className="log-list">{(data?.languageUsage || []).map((item) => <div className="log-row" key={item.languageCode}><span className="dot green" /><span>{languageLabel(item.languageCode)}</span><b className="listen-count">{item.listens} lượt</b></div>)}{!data?.languageUsage?.length && <p className="muted">{emptyMessage("Chưa có lượt nghe.")}</p>}</div></article></div>
+    <article className="panel"><h2>Lộ trình được bắt đầu nhiều nhất · 24 giờ</h2><div className="log-list">{(data?.popularRoutes || []).map((item) => <div className="log-row" key={item.routeId}><span className="dot green" /><span>{item.routeName}</span><b className="listen-count">{item.selections} lượt bắt đầu</b></div>)}{!data?.popularRoutes?.length && <p className="muted">{emptyMessage("Chưa có lượt bắt đầu lộ trình.")}</p>}</div></article>
   </section>;
 }
 
@@ -175,9 +200,6 @@ function PoiManagement() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [saveWarning, setSaveWarning] = useState("");
-  const [aiDraft, setAiDraft] = useState(null);
-  const [aiNotes, setAiNotes] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
   const load = () => api("/api/admin/pois").then(setPois).catch((reason) => setMessage(reason.message));
   useEffect(() => {
     load();
@@ -188,16 +210,6 @@ function PoiManagement() {
         : { ...current, sourceLanguageCode: items[0]?.code || "" });
     }).catch((reason) => setMessage(`Không tải được danh mục ngôn ngữ: ${reason.message}`));
   }, []);
-  useEffect(() => {
-    if (!form.id) return;
-    let current = true;
-    api(`/api/admin/pois/${form.id}/ai-description/latest`).then((draft) => {
-      if (current && draft.status !== "NONE") setAiDraft(draft);
-    }).catch((reason) => {
-      if (current) setMessage(`Không tải được bản nháp AI: ${reason.message}`);
-    });
-    return () => { current = false; };
-  }, [form.id]);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const save = async (event) => {
     event.preventDefault();
@@ -262,70 +274,24 @@ function PoiManagement() {
       if (form.id === poi.id) {
         setForm(empty);
         setThumbnailFile(null);
-        setAiDraft(null);
-        setAiNotes("");
       }
       setMessage("Đã xóa POI.");
       load();
     } catch (reason) { setMessage(reason.message); }
   };
-  const generateDraft = async () => {
-    if (!form.id) { setMessage("Hãy lưu POI trước, sau đó chọn Sửa để tạo gợi ý AI."); return; }
-    setAiBusy(true); setMessage("");
-    try {
-      const result = await api(`/api/admin/pois/${form.id}/ai-description`, { method: "POST", body: JSON.stringify({ notes: aiNotes }) });
-      setAiDraft(result);
-      setMessage(result.status === "DRAFT" ? "Gemini đã tạo bản nháp. Hãy kiểm tra trước khi áp dụng." : result.errorMessage || "Không tạo được gợi ý.");
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
-  const saveDraft = async () => {
-    if (!aiDraft?.id) return;
-    setAiBusy(true);
-    try {
-      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}`, { method: "PUT", body: JSON.stringify({ content: aiDraft.content }) });
-      setAiDraft(result); setMessage("Đã lưu chỉnh sửa bản nháp.");
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
-  const acceptDraft = async () => {
-    if (!aiDraft?.id) return;
-    setAiBusy(true);
-    try {
-      const savedDraft = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}`, { method: "PUT", body: JSON.stringify({ content: aiDraft.content }) });
-      setAiDraft(savedDraft);
-      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}/accept`, { method: "POST" });
-      setForm((current) => ({ ...current, descriptionSource: result.content, contentRevision: result.contentRevision }));
-      setAiDraft(result); setMessage("Đã áp dụng mô tả và kích hoạt pipeline nội dung."); load();
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
-  const discardDraft = async () => {
-    if (!aiDraft?.id) return;
-    setAiBusy(true);
-    try {
-      const result = await api(`/api/admin/pois/${form.id}/ai-description/drafts/${aiDraft.id}/discard`, { method: "POST" });
-      setAiDraft(result); setMessage("Đã bỏ bản nháp; mô tả POI không thay đổi.");
-    } catch (reason) { setMessage(reason.message); }
-    finally { setAiBusy(false); }
-  };
   const edit = (poi) => {
     setForm({ ...poi, latitude: String(poi.latitude), longitude: String(poi.longitude), radiusM: String(poi.radiusM) });
     setThumbnailFile(null);
-    setAiDraft(null);
-    setAiNotes("");
     setMessage("");
     setSaveWarning("");
   };
   const resetForm = () => {
     setForm({ ...empty, sourceLanguageCode: languages.find((item) => item.code === "vi")?.code || languages[0]?.code || "" });
     setThumbnailFile(null);
-    setAiDraft(null);
-    setAiNotes("");
     setMessage("");
     setSaveWarning("");
   };
-  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5 · UC07</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className={`alert${aiDraft?.status === "FAILED" ? " error" : ""}`}>{message}</div>}{saveWarning && <div className="alert error" role="alert">{saveWarning}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}>
+  return <section className="content"><div className="page-heading"><div><p className="eyebrow">UC06 · FR-5</p><h1>Quản lý điểm tham quan</h1><p className="muted">Tạo, chỉnh sửa, ẩn hoặc xóa POI. POI nháp không hiển thị với du khách.</p></div><button className="secondary" onClick={load}>↻ Làm mới</button></div>{message && <div className="alert">{message}</div>}{saveWarning && <div className="alert error" role="alert">{saveWarning}</div>}<div className="admin-columns"><article className="panel"><h2>{form.id ? "Chỉnh sửa POI" : "Tạo POI mới"}</h2><form className="poi-form" onSubmit={save}>
     <label>Tên POI<input value={form.name} onChange={(event) => update("name", event.target.value)} maxLength="255" required /></label>
     <label>Vị trí trên bản đồ <small className="muted">Nhấn vào bản đồ để chọn hoặc kéo vị trí bằng cách cập nhật tọa độ.</small></label>
     <PoiLocationPicker key={form.id || "new-poi"} latitude={form.latitude} longitude={form.longitude} radiusM={form.radiusM} onChange={(latitude, longitude) => { update("latitude", String(latitude)); update("longitude", String(longitude)); }} />
@@ -335,16 +301,16 @@ function PoiManagement() {
     <label>Ảnh thumbnail <small className="muted">PNG/JPEG, tối đa 5 MB. Ảnh tải lên được lưu trong kho cục bộ của backend.</small><input type="file" accept="image/png,image/jpeg" onChange={(event) => setThumbnailFile(event.target.files?.[0] || null)} />{thumbnailFile && <small>{thumbnailFile.name} — sẽ tải lên khi lưu POI</small>}{form.thumbnailUrl && !thumbnailFile && <img className="poi-thumbnail-preview" src={form.thumbnailUrl} alt={`Thumbnail ${form.name}`} />}</label>
     <label>Mô tả gốc<textarea rows="5" value={form.descriptionSource} onChange={(event) => update("descriptionSource", event.target.value)} required /></label>
     <div className="form-actions"><button className="primary" type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu POI"}</button><button className="secondary" type="button" onClick={resetForm}>Tạo mới / hủy</button></div></form>
-      <div className="ai-draft-panel"><h3>UC07 · Gợi ý mô tả bằng Gemini</h3><p className="muted">AI chỉ tạo bản nháp. Kiểm tra nội dung trước khi chấp nhận; mô tả POI hiện tại không bị đổi nếu bạn bỏ bản nháp.</p><label>Ghi chú dữ kiện đã kiểm chứng<textarea rows="3" maxLength="4000" value={aiNotes} onChange={(event) => setAiNotes(event.target.value)} placeholder="Ví dụ: thông tin lịch sử đã xác nhận, điểm đặc biệt cần nhắc đến" /></label><button className="secondary" type="button" disabled={aiBusy || !form.id} onClick={generateDraft}>{aiBusy ? "Đang xử lý…" : aiDraft?.status === "DRAFT" ? "Tạo lại gợi ý" : "Tạo gợi ý bằng Gemini"}</button>{!form.id && <small className="muted">Lưu POI trước để tạo và lưu bản nháp.</small>}{aiDraft && <div className="ai-draft-result"><div className="form-actions"><b>Trạng thái: {aiDraft.status}</b><small>{aiDraft.provider} · {aiDraft.model}</small></div>{aiDraft.errorMessage && <div className="alert error">{aiDraft.errorMessage}</div>}{aiDraft.content && <><textarea aria-label="Nội dung bản nháp AI" rows="10" value={aiDraft.content} disabled={aiDraft.status !== "DRAFT" || aiBusy} onChange={(event) => setAiDraft((draft) => ({ ...draft, content: event.target.value }))} /><div className="form-actions"><button className="secondary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={saveDraft}>Lưu sửa bản nháp</button><button className="primary" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={acceptDraft}>Chấp nhận và áp dụng</button><button className="danger-text" type="button" disabled={aiBusy || aiDraft.status !== "DRAFT"} onClick={discardDraft}>Bỏ bản nháp</button></div></>}</div>}</div>
     </article>    <article className="panel"><h2>Danh sách POI <span className="count">{pois.length}</span></h2><div className="table-list">{pois.map((poi) => <div className="poi-row" key={poi.id}><div><b>{poi.name}</b><small>{poi.latitude}, {poi.longitude} · bán kính {poi.radiusM}m</small></div><div className="row-actions"><span className={`status ${String(poi.status).toLowerCase()}`}>{poi.status}</span><button type="button" className="poi-edit-button" aria-label={`Sửa ${poi.name}`} onClick={() => edit(poi)}>Sửa</button><button type="button" className="poi-delete-button" aria-label={`Xóa ${poi.name}`} onClick={() => remove(poi)}>Xóa</button></div></div>)}{!pois.length && <p className="muted">Chưa có dữ liệu POI.</p>}</div></article></div></section>;
 }
 
 export default function AdminPortal() {
   const [account, setAccount] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const resolvePage = () => window.location.pathname === "/poimanagement" ? "pois" : window.location.pathname.startsWith("/admin/sessions") ? "sessions" : window.location.pathname.startsWith("/admin/translations") ? "translations" : "dashboard";
+  const resolvePage = () => window.location.pathname === "/poimanagement" ? "pois" : window.location.pathname.startsWith("/admin/routes") ? "routes" : window.location.pathname.startsWith("/admin/translations") ? "translations" : "dashboard";
   const [page, setPage] = useState(resolvePage);
   const [reviewDirty, setReviewDirty] = useState(false);
+  const [routeDirty, setRouteDirty] = useState(false);
   useEffect(() => {
     let active = true;
     const expired = () => setAccount(null);
@@ -356,6 +322,9 @@ export default function AdminPortal() {
   useEffect(() => {
     const handleBack = () => {
       const next = resolvePage();
+      if (page === "routes" && routeDirty && next !== "routes" && !window.confirm("Lộ trình có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) {
+        window.history.pushState({}, "", "/admin/routes"); return;
+      }
       if (page === "translations" && reviewDirty && next !== "translations" && !window.confirm("Bản dịch có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) {
         window.history.pushState({}, "", "/admin/translations"); return;
       }
@@ -363,13 +332,14 @@ export default function AdminPortal() {
     };
     window.addEventListener("popstate", handleBack);
     return () => window.removeEventListener("popstate", handleBack);
-  }, [page, reviewDirty]);
+  }, [page, reviewDirty, routeDirty]);
   const navigateAdmin = (path, nextPage) => {
+    if (page === "routes" && routeDirty && nextPage !== page && !window.confirm("Lộ trình có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) return;
     if (page === "translations" && reviewDirty && nextPage !== page && !window.confirm("Bản dịch có thay đổi chưa lưu. Rời trang và bỏ thay đổi?")) return;
     window.history.pushState({}, "", path);
     setPage(nextPage);
   };
   if (authLoading) return <main className="admin-login"><p role="status">Đang kiểm tra phiên quản trị…</p></main>;
   if (!account) return <Login onLogin={setAccount} />;
-  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "sessions" ? "active" : ""} onClick={() => navigateAdmin("/admin/sessions", "sessions")}>◎ <span>Sessions & Routes</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if (reviewDirty && !window.confirm("Bản dịch có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; void api("/api/admin/auth/logout", { method: "POST" }).then(() => setAccount(null)).catch((reason) => window.alert(reason.message)); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "sessions" ? "Sessions & Routes" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span>VoiceMap Admin</span></header>{page === "dashboard" ? <Dashboard /> : page === "sessions" ? <SessionRoutes /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
+  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "routes" ? "active" : ""} onClick={() => navigateAdmin("/admin/routes", "routes")}>◎ <span>Quản lý lộ trình</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if ((reviewDirty || routeDirty) && !window.confirm("Có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; void api("/api/admin/auth/logout", { method: "POST" }).then(() => setAccount(null)).catch((reason) => window.alert(reason.message)); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "routes" ? "Quản lý lộ trình" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span>VoiceMap Admin</span></header>{page === "dashboard" ? <Dashboard /> : page === "routes" ? <RouteManagement onDirtyChange={setRouteDirty} /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
 }

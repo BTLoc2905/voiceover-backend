@@ -49,3 +49,11 @@ test("invalid or inaccessible browser storage is ignored on restoration", () => 
   }
   assert.equal(readPersonalRoute({ getItem() { throw new Error("Storage denied"); } }), null);
 });
+
+test("invalid route metadata cannot overwrite an existing saved personal route", () => {
+  const storage=memoryStorage(), original={name:'Route',sourceRouteId:1,pois:[poi(1),poi(2)]};savePersonalRoute(storage,original);
+  for(const broken of [{...original,sourceRouteId:null},{...original,name:''},{...original,pois:[poi(1),poi(1)]},{...original,pois:[poi(1),poi(2,{status:'HIDDEN'})]}]) {
+    assert.throws(()=>savePersonalRoute(storage,broken));assert.deepEqual(readPersonalRoute(storage).poiIds,[1,2]);
+  }
+  storage.setItem(PERSONAL_ROUTE_KEY,JSON.stringify({version:1,poiIds:[1,2]}));assert.equal(readPersonalRoute(storage),null);
+});

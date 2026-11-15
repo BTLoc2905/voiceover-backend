@@ -36,7 +36,8 @@ export function moveRouteStop(pois, index, offset) {
 export function readPersonalRoute(storage) {
   try {
     const route = JSON.parse(storage.getItem(PERSONAL_ROUTE_KEY));
-    if (route?.version !== 1 || !Array.isArray(route.poiIds)
+    if (route?.version !== 1 || !Number.isSafeInteger(route.sourceRouteId) || route.sourceRouteId <= 0
+      || typeof route.name !== "string" || !route.name.trim() || route.name.length > 255 || !Array.isArray(route.poiIds)
       || route.poiIds.length < 2 || route.poiIds.length > 10
       || new Set(route.poiIds).size !== route.poiIds.length
       || route.poiIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) return null;
@@ -47,6 +48,8 @@ export function readPersonalRoute(storage) {
 }
 
 export function savePersonalRoute(storage, route) {
+  if (!route || validateRouteStops(route.pois) || !Number.isSafeInteger(route.sourceRouteId) || route.sourceRouteId <= 0
+    || typeof route.name !== "string" || !route.name.trim() || route.name.length > 255) throw new Error("Lộ trình cá nhân không hợp lệ.");
   storage.setItem(PERSONAL_ROUTE_KEY, JSON.stringify({
     version: 1,
     name: route.name,

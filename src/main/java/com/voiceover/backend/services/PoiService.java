@@ -23,6 +23,7 @@ public class PoiService {
     private final RouteStopRepository routeStopRepo;
     private final TranslationReviewService reviewService;
     private final PoiThumbnailService thumbnailService;
+    private final AudioGenerationService audioFiles;
 
     // Public reads never edit source content, import sample POIs or enqueue jobs.
     public List<Map<String, Object>> getNearbyPublishedPois(double userLat, double userLng, double maxRadiusMeters) {
@@ -31,7 +32,7 @@ public class PoiService {
             throw new IllegalArgumentException("Vị trí hoặc bán kính tìm kiếm không hợp lệ.");
         List<Map<String, Object>> result = new ArrayList<>();
         for (Poi poi : poiRepo.findByStatus("PUBLISHED")) {
-            if (!RouteSessionService.hasValidCoordinates(poi)) continue;
+            if (!RouteService.hasValidCoordinates(poi)) continue;
             double distance = calculateHaversineMeters(userLat, userLng, poi.getLatitude().doubleValue(), poi.getLongitude().doubleValue());
             if (distance > maxRadiusMeters) continue;
             Map<String, Object> item = new LinkedHashMap<>();
@@ -48,20 +49,19 @@ public class PoiService {
     public Map<String, Object> getPoiAudioGuide(Long poiId, String requestedLang) {
         Poi poi = poiRepo.findById(poiId).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại"));
         if (!"PUBLISHED".equalsIgnoreCase(poi.getStatus())) throw new IllegalArgumentException("POI này chưa xuất bản hoặc đã tạm ẩn.");
-        String defaultLang = languageRepo.findByIsDefaultTrue().map(Language::getCode).orElse("vi");
+        String defaultLang = languageRepo.findByIsDefaultTrue().map(Language::getCode).orElse(poi.getSourceLanguageCode());
+        Optional<Translation> requestedText = completedTranslation(poi, requestedLang);
+        Map<String, Object> textFallback = new LinkedHashMap<>();
+        textFallback.put("activeLanguage", requestedText.isPresent() ? requestedLang : poi.getSourceLanguageCode());
+        textFallback.put("textContent", requestedText.map(Translation::getContent).orElse(poi.getDescriptionSource()));
 
-        String activeLang = requestedLang;
-        Optional<Translation> transOpt = completedTranslation(poi, requestedLang);
-        String builtInNarration = transOpt.isPresent() ? null : availableBuiltIn(poi, requestedLang);
-        if (transOpt.isEmpty() && builtInNarration == null) {
-            activeLang = defaultLang;
-            transOpt = completedTranslation(poi, defaultLang);
-            builtInNarration = transOpt.isPresent() ? null : availableBuiltIn(poi, defaultLang);
-        }
-        if (transOpt.isEmpty() && builtInNarration == null) activeLang = poi.getSourceLanguageCode();
-        boolean fallbackUsed = !Objects.equals(activeLang, requestedLang);
-        String textContent = transOpt.map(Translation::getContent).orElse(builtInNarration == null ? poi.getDescriptionSource() : builtInNarration);
-        Optional<Audio> audioOpt = transOpt.isPresent() ? audioRepo.findByPoiIdAndLanguageCode(poiId, activeLang) : Optional.empty();
+        // Return both usable sources so a browser media/decode error can also fall back.
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        audioCandidate(poi, requestedLang).ifPresent(candidates::add);
+        if (!Objects.equals(requestedLang, defaultLang)) audioCandidate(poi, defaultLang).ifPresent(candidate -> {
+            if (candidates.stream().noneMatch(existing -> Objects.equals(existing.get("audioUrl"), candidate.get("audioUrl")))) candidates.add(candidate);
+        });
+        Map<String, Object> selected = candidates.isEmpty() ? textFallback : candidates.getFirst();
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("poiId", poi.getId());
@@ -69,22 +69,34 @@ public class PoiService {
         response.put("poiName", poi.getName());
         response.put("thumbnailUrl", poi.getThumbnailUrl());
         response.put("requestedLanguage", requestedLang);
-        response.put("activeLanguage", activeLang);
-        response.put("fallbackUsed", fallbackUsed);
-        response.put("textContent", textContent);
-        response.put("audioUrl", audioOpt.filter(audio -> "COMPLETED".equals(audio.getStatus())).map(Audio::getFilePath).filter(path -> !path.isBlank()).orElse(null));
-        response.put("audioStatus", audioOpt.map(Audio::getStatus).orElse("TEXT_ONLY"));
-        response.put("browserTtsAllowed", languageRepo.findById(activeLang).map(Language::isTtsSupported).orElse(false));
+        response.put("defaultLanguage", defaultLang);
+        response.put("activeLanguage", selected.get("activeLanguage"));
+        response.put("fallbackUsed", !candidates.isEmpty() && !Objects.equals(requestedLang, selected.get("activeLanguage")));
+        response.put("textContent", selected.get("textContent"));
+        response.put("audioUrl", selected.get("audioUrl"));
+        response.put("audioStatus", candidates.isEmpty() ? "TEXT_ONLY" : "COMPLETED");
+        response.put("browserTtsAllowed", false);
+        response.put("audioCandidates", candidates);
+        response.put("textFallback", textFallback);
         return response;
+    }
+
+    private Optional<Map<String, Object>> audioCandidate(Poi poi, String language) {
+        return completedTranslation(poi, language).flatMap(text -> audioRepo.findByPoiIdAndLanguageCode(poi.getId(), language)
+                .filter(audio -> "COMPLETED".equals(audio.getStatus()) && text.getId() != null
+                        && Objects.equals(text.getId(), audio.getTranslationId()) && audioFiles.hasUsableFile(audio.getFilePath()))
+                .map(audio -> {
+                    Map<String, Object> candidate = new LinkedHashMap<>();
+                    candidate.put("audioUrl", audio.getFilePath());
+                    candidate.put("activeLanguage", language);
+                    candidate.put("textContent", text.getContent());
+                    return candidate;
+                }));
     }
 
     private Optional<Translation> completedTranslation(Poi poi, String language) {
         return translationRepo.findByPoiIdAndLanguageCode(poi.getId(), language)
                 .filter(text -> (poi.getContentRevision() == 0 || Objects.equals(poi.getSourceFingerprint(), text.getSourceHash())) && "COMPLETED".equals(text.getStatus()) && text.getContent() != null && !text.getContent().isBlank());
-    }
-    private String availableBuiltIn(Poi poi, String language) {
-        return poi.getContentRevision() == 0 && Set.of("Đại học Sài Gòn", "Công viên 23 tháng 9", "Chợ An Đông", "Nhà thờ Chợ Quán").contains(poi.getName())
-                ? OpenStreetMapPoiService.localizedNarrationFor(poi.getName(), language) : null;
     }
 
     // Source, invalidation and durable language tasks are one database transaction.
@@ -99,10 +111,10 @@ public class PoiService {
             target = poiRepo.findForUpdate(request.getId()).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));
             if (request.getContentRevision() != target.getContentRevision())
                 throw new ContentReviewConflictException("Mô tả nguồn đã thay đổi. Tải lại POI trước khi lưu; nội dung đang soạn chưa bị ghi đè.");
-            if (!RouteSessionService.published(request.getStatus()) || !RouteSessionService.hasValidCoordinates(request)) rejectServingRoutes(request.getId());
+            if (!RouteService.published(request.getStatus()) || !RouteService.hasValidCoordinates(request)) rejectServingRoutes(request.getId());
         }
         validatePoi(request);
-        if (RouteSessionService.published(request.getStatus())) reviewService.requireDefaultAudioForPublication(request, target);
+        if (RouteService.published(request.getStatus())) reviewService.requireDefaultAudioForPublication(request, target);
         target.setName(request.getName().strip()); target.setDescriptionSource(request.getDescriptionSource().strip());
         target.setSourceLanguageCode(request.getSourceLanguageCode()); target.setStatus(request.getStatus().toUpperCase(Locale.ROOT));
         target.setLatitude(request.getLatitude()); target.setLongitude(request.getLongitude()); target.setRadiusM(request.getRadiusM());
@@ -149,7 +161,7 @@ public class PoiService {
             throw new IllegalArgumentException("Ngôn ngữ gốc không tồn tại hoặc đã ngừng hoạt động.");
     }
 
-    // UC06 & Quy tắc F-05: Chặn xóa POI nếu đang nằm trong Route/Session đã xuất bản
+    // UC06 & Quy tắc F-05: Chặn xóa POI nếu đang nằm trong Route đã xuất bản
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void deletePoiSafely(Long poiId) {
         poiRepo.findForUpdate(poiId).orElseThrow(() -> new IllegalArgumentException("POI không tồn tại."));

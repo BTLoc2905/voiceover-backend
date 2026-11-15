@@ -113,5 +113,16 @@
   "stopNavigation": "Navigation stoppen · zurück zur Liste",
   "requestFailed": "Daten konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
   "narrationFailed": "Der Kommentar konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
-  "locationUnavailable": "Ihr Standort ist nicht verfügbar. Sie können weiterhin einen Ort auf der Karte auswählen."
+  "locationUnavailable": "Ihr Standort ist nicht verfügbar. Sie können weiterhin einen Ort auf der Karte auswählen.",
+  "tapToPlay": "Zum Anhören tippen",
+  "audioUnavailable": "Audio ist nicht verfügbar. Sie können den Text weiterhin lesen.",
+  "fallbackAudio": "Audio in der gewählten Sprache ist nicht verfügbar. Ersatzaudio wird verwendet",
+  "skipped": "Übersprungen",
+  "notVisited": "Nicht besucht",
+  "journeyCompleted": "Tour beendet",
+  "progressNotSaved": "Der Fortschritt konnte auf diesem Gerät nicht gespeichert werden. Er gilt nur für diesen Besuch.",
+  "gpsDenied": "Standortzugriff verweigert. Orte können weiterhin auf der Karte gewählt werden. Standort in den Browsereinstellungen erlauben und erneut versuchen.",
+  "gpsWeak": "Schwaches GPS-Signal. Der Standort ist ungenau; automatische Wiedergabe ist pausiert.",
+  "descriptionFallback": "Originalbeschreibung wird angezeigt",
+  "mapUnavailable": "Die Karte konnte nicht geladen werden. Netzwerkverbindung prüfen."
 }

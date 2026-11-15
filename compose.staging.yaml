@@ -1,0 +1,7 @@
+# Overlay the local Compose stack with immutable release tags on Staging.
+# Always run with --no-build. Database, audio and image volumes stay in compose.yaml.
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?Set the approved backend SHA image}
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set the approved frontend SHA image}

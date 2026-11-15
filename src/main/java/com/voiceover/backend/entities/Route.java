@@ -12,13 +12,13 @@ public class Route {
     @Column(name = "route_id")
     private Long id;
 
-    @Column(name = "session_id", nullable = false)
-    private Long sessionId;
-
     @Column(nullable = false)
     private String name;
 
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "DRAFT"; // DRAFT | PUBLISHED | CLOSED
+    private String status = "DRAFT"; // DRAFT | PUBLISHED
 }

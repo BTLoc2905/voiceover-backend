@@ -21,11 +21,11 @@ public class MonitoringService {
     private final ApiRequestMetrics requests;
 
     public Map<String, Object> dashboard() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime day = now.minusHours(24);
+        var generated = java.time.OffsetDateTime.now();
+        LocalDateTime now = generated.toLocalDateTime();
         var measured = requests.snapshot();
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("generatedAt", now.toString());
+        result.put("generatedAt", generated.toString());
         result.put("usageWindowHours", 24);
         result.put("activeWindowMinutes", 2);
         result.put("requestWindowMinutes", 5);
@@ -35,13 +35,21 @@ public class MonitoringService {
         result.put("errorRatePercent", measured.errorRatePercent());
         result.put("averageLatencyMs", measured.averageLatencyMs());
         try {
-            jdbc.queryForObject("SELECT 1", Integer.class);
-            result.put("databaseStatus", "NORMAL");
+            result.putAll(databaseSnapshot(now));
         } catch (RuntimeException error) {
             result.put("databaseStatus", "ERROR");
+            result.put("pipelineStatus", "UNKNOWN");
             result.put("dataUnavailable", true);
-            return result;
         }
+        return result;
+    }
+
+    /** Publish DB-dependent counters together; never label partial/failed queries healthy. */
+    private Map<String, Object> databaseSnapshot(LocalDateTime now) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        LocalDateTime day = now.minusHours(24);
+        jdbc.queryForObject("SELECT 1", Integer.class);
+        result.put("databaseStatus", "NORMAL");
 
         long pending = tasks.countByStatus("PENDING");
         long processing = tasks.countByStatus("PROCESSING");
@@ -49,6 +57,7 @@ public class MonitoringService {
         result.put("pipelineStatus", failed >= 5 ? "ERROR" : failed > 0 ? "WARNING" : "NORMAL");
         result.put("pipelinePending", pending);
         result.put("pipelineProcessing", processing);
+        result.put("pipelineCompleted", tasks.countByStatus("COMPLETED"));
         result.put("pipelineFailed", failed);
         result.put("recentErrors", logs.findTop10BySeverityInAndOccurredAtAfterOrderByOccurredAtDesc(List.of("ERROR", "CRITICAL"), day)
                 .stream().map(this::logView).toList());

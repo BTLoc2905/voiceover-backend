@@ -10,8 +10,11 @@ import { guestCatalogs, guestText } from "./guestUi.js";
 import "./guestUi.css";
 import useTourLocation from "./useTourLocation.js";
 import useTourNarration from "./useTourNarration.js";
-import { distanceMeters, validPoi } from "./autoNarration.js";
-import { recordActiveVisit, recordAppOpen } from "./narrationApi.js";
+import { validPoi } from "./autoNarration.js";
+import { getGuide, recordActiveVisit, recordAppOpen } from "./narrationApi.js";
+import { guestPoiItems, PoiDetailsLoader } from "./guestPoi.js";
+import { createPoiCard } from "./poiCard.js";
+import { advanceJourney, createJourney, restoreJourney, saveJourney } from "./routeJourney.js";
 import "./AutoNarration.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -55,24 +58,29 @@ POI_NAMES["Chợ An Đông"].ms = "Pasar An Dong";
 POI_NAMES["Chợ An Đông"].hi = "आन डोंग बाजार";
 const localizedPoiName = (name, language) => POI_NAMES[name]?.[language] || name;
 
-function MapArtwork({ route = false, location, pois = [], controllerRef, language = "vi", routeGeometry, onPoiSelect, fitAllPois = false }) {
+function MapArtwork({ location, pois = [], controllerRef, language = "vi", routeGeometry, onPoiSelect, fitAllPois = false }) {
   const t = (key) => guestText(language, key);
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
-  const routeRequest = useRef(null);
   const latestLocation = useRef(location);
   const latestPoints = useRef([]);
   const fittedPois = useRef(false);
   const fittedRoute = useRef(null);
   const centered = useRef(false);
+  const details = useRef(null);
+  if (!details.current) details.current = new PoiDetailsLoader(getGuide);
+  const [tileError, setTileError] = useState(false);
+  useEffect(() => { details.current.setLanguage(language); return () => details.current.clear(); }, [language]);
   useEffect(() => { latestLocation.current = location; }, [location]);
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
-    const map = L.map(mapRef.current, { zoomControl: false, attributionControl: true }).setView([10.7769, 106.7009], 13);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const map = L.map(mapRef.current, { zoomControl: false, attributionControl: true, zoomAnimation: false, fadeAnimation: false }).setView([10.7769, 106.7009], 13);
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap contributors",
       maxZoom: 19,
     }).addTo(map);
+    tiles.on("tileerror", () => setTileError(true));
+    tiles.on("tileload", () => setTileError(false));
     mapInstance.current = map;
     if (controllerRef) {
       controllerRef.current = {
@@ -93,6 +101,8 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
     }
     return () => {
       if (controllerRef) controllerRef.current = null;
+      tiles.off();
+      map.stop();
       map.remove();
       mapInstance.current = null;
       centered.current = false; fittedPois.current = false; fittedRoute.current = null;
@@ -101,10 +111,7 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
   useEffect(() => {
     const map = mapInstance.current;
     if (!map) return;
-    if (routeRequest.current) routeRequest.current.abort();
-    const abortController = new AbortController();
-    routeRequest.current = abortController;
-    if (location && !centered.current && !fittedPois.current) { map.setView([location.lat, location.lng], 16); centered.current = true; }
+    if (location && !centered.current) { map.setView([location.lat, location.lng], 16); centered.current = true; }
     let openPoiGroup;
     map.eachLayer((layer) => {
       if (layer instanceof L.Marker && layer.isPopupOpen()) openPoiGroup = layer.getPopup().getContent()?.dataset?.poiGroup;
@@ -115,47 +122,43 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
     if (location) L.circleMarker([location.lat, location.lng], {
       radius: 8, color: "#fff", weight: 3, fillColor: "#2563eb", fillOpacity: 1,
     }).addTo(map).bindTooltip(guestText(language, "yourLocation"), { direction: "top" });
-    const points = pois.map((item) => item.poi).filter(Boolean).map((poi) => [Number(poi.latitude), Number(poi.longitude)]);
+    const safePois = pois.filter(item => validPoi(item.poi));
+    const points = safePois.map((item) => item.poi).map((poi) => [Number(poi.latitude), Number(poi.longitude)]);
     latestPoints.current = points;
     if (fitAllPois && points.length && !fittedPois.current) {
       map.fitBounds(L.latLngBounds(location ? [...points, [location.lat, location.lng]] : points), { padding: [40, 40], maxZoom: 16 });
-      fittedPois.current = true; centered.current = true;
+      fittedPois.current = true; centered.current = Boolean(location);
     }
     const coordinateGroups = new Map();
-    if (fitAllPois) for (const item of pois) {
+    if (fitAllPois) for (const item of safePois) {
       if (!item.poi) continue;
       const key = `${Number(item.poi.latitude)},${Number(item.poi.longitude)}`;
       const group = coordinateGroups.get(key) || [];
       group.push(item); coordinateGroups.set(key, group);
     }
-    pois.forEach((item, index) => {
+    safePois.forEach((item, index) => {
       const poi = item.poi;
       if (!poi) return;
       const poiPosition = [Number(poi.latitude), Number(poi.longitude)];
       L.circle(poiPosition, {
         radius: Number(poi.radiusM) > 0 ? Number(poi.radiusM) : 50,
-        color: "#ef4444",
-        weight: 4,
+        color: item.nearby ? "#f97316" : "#64748b",
+        weight: item.nearby ? 4 : 2,
         opacity: 0.95,
-        fillColor: "#ef4444",
+        fillColor: item.nearby ? "#f97316" : "#64748b",
         fillOpacity: 0.12,
         dashArray: "12 9",
       }).addTo(map);
       const siblings = coordinateGroups.get(poiPosition.join(",")) || [item];
       if (siblings[0] !== item) return;
       const popup = document.createElement("div");
+      const cards = [];
       popup.dataset.poiGroup = siblings.map((sibling) => sibling.poi.id).join(",");
       for (const sibling of siblings) {
-        const entry = document.createElement("div");
         const name = localizedPoiName(sibling.poi.name, language);
-        entry.textContent = `${route ? `${index + 1}. ` : ""}${name}${Number.isFinite(sibling.distanceMeters) ? ` · ${Math.round(sibling.distanceMeters)} m` : ""}`;
-        if (onPoiSelect) {
-          const listen = document.createElement("button"); listen.type = "button"; listen.className = "map-listen-button";
-          listen.textContent = siblings.length > 1 ? `${guestText(language, "listen")} ${name}` : guestText(language, "listenToNarration");
-          listen.addEventListener("click", () => onPoiSelect("audio", sibling.poi.id, "map"));
-          entry.append(document.createElement("br"), listen);
-        }
-        popup.append(entry);
+        const card = createPoiCard({ poi: sibling.poi, name, language, distance: sibling.distanceMeters,
+          loader: details.current, onListen: onPoiSelect ? id => onPoiSelect("audio", id, "map") : null });
+        cards.push(card); popup.append(card.entry);
       }
       const markerOptions = routeGeometry !== undefined ? {
         title: `${index + 1}. ${localizedPoiName(poi.name, language)}`,
@@ -163,11 +166,13 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
       } : {
         title: siblings.map((sibling) => localizedPoiName(sibling.poi.name, language)).join(" · "),
         alt: siblings.map((sibling) => localizedPoiName(sibling.poi.name, language)).join(" · "),
-        ...(siblings.length > 1 ? { icon: L.divIcon({ className: "poi-map-group-marker", html: `<span>${siblings.length}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) } : {}),
+        icon: new L.Icon.Default({ className: `guest-poi-marker${item.nearby ? " nearby" : ""}` }),
+        ...(siblings.length > 1 ? { icon: L.divIcon({ className: `poi-map-group-marker${item.nearby ? " nearby" : ""}`, html: `<span>${siblings.length}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) } : {}),
       };
       const marker = L.marker(poiPosition, markerOptions)
         .addTo(map)
         .bindPopup(popup);
+      marker.on("popupopen", () => cards.forEach(card => card.load()));
       if (popup.dataset.poiGroup === openPoiGroup) marker.openPopup();
     });
     if (routeGeometry !== undefined) {
@@ -187,53 +192,22 @@ function MapArtwork({ route = false, location, pois = [], controllerRef, languag
           fittedRoute.current = key;
         }
       }
-    } else if (route && points.length > 1 && location) {
-      const coordinates = [[location.lng, location.lat], ...points.map(([lat, lng]) => [lng, lat])];
-      const coordinateString = coordinates.map(([lng, lat]) => `${lng},${lat}`).join(";");
-      fetch(`https://router.project-osrm.org/route/v1/driving/${coordinateString}?overview=full&geometries=geojson`, {
-        signal: abortController.signal,
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error("Không lấy được tuyến đường thực tế.");
-          return response.json();
-        })
-        .then((data) => {
-          const routeGeometry = data.routes?.[0]?.geometry?.coordinates;
-          if (!routeGeometry?.length || abortController.signal.aborted) return;
-          L.polyline(routeGeometry.map(([lng, lat]) => [lat, lng]), {
-            color: "#2563eb",
-            weight: 6,
-            opacity: 0.9,
-            lineCap: "round",
-            lineJoin: "round",
-          }).addTo(map);
-        })
-        .catch((error) => {
-          if (error.name !== "AbortError") {
-            L.polyline([[location.lat, location.lng], ...points], {
-              color: "#2563eb",
-              weight: 5,
-              opacity: 0.75,
-              dashArray: "8 8",
-            }).addTo(map);
-          }
-        });
     }
-    return () => abortController.abort();
-  }, [location, pois, route, language, routeGeometry, onPoiSelect, fitAllPois]);
+  }, [location, pois, language, routeGeometry, onPoiSelect, fitAllPois]);
   return (
     <div className="map-art leaflet-map" ref={mapRef}>
+      {tileError && <p className="map-tile-error" role="alert">{t("mapUnavailable")}</p>}
       <div className="map-tools">
         <button aria-label={t("zoomIn")} onClick={() => controllerRef?.current?.zoomIn()}>＋</button>
         <button aria-label={t("zoomOut")} onClick={() => controllerRef?.current?.zoomOut()}>−</button>
-        <button aria-label={t("goToLocation")} onClick={() => controllerRef?.current?.locate()}>◎</button>
+        <button aria-label={t("goToLocation")} disabled={!location} onClick={() => controllerRef?.current?.locate()}>◎</button>
         {fitAllPois && <button aria-label={t("showAllPlaces")} title={t("showAllPlaces")} onClick={() => controllerRef?.current?.showPois()}>▦</button>}
       </div>
     </div>
   );
 }
 
-function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, language, setLanguage, playback, player }) {
+function NearbyScreen({ setScreen, pois, mapPois, loading, error, gpsError, retryGps, retryCatalog, location, language, setLanguage, playback, player }) {
   const mapController = useRef(null);
   const sheetDrag = useRef(null);
   const ignoreSheetClick = useRef(false);
@@ -292,10 +266,11 @@ function NearbyScreen({ setScreen, pois, mapPois, loading, error, location, lang
           <div><small>{t("currentLocation")}</small><h1>{t("nearbyPlaces")} <span className="poi-total">({pois.length})</span></h1></div>
           <LanguagePicker language={language} onChange={setLanguage} />
         </div>
-        {loading && <p className="api-state">{t("loadingPois")}</p>}
-        {error && <p className="api-state error">{error}</p>}
+        {loading && <p className="api-state" role="status">{t("loadingPois")}</p>}
+        {error && <p className="api-state error" role="alert">{error}<button type="button" onClick={retryCatalog}>{t("retry")}</button></p>}
+        {gpsError && <p className="api-state" role="status">{gpsError}{location && ` · GPS ±${Math.round(location.accuracy)} m`} <button type="button" onClick={retryGps}>{t("retry")}</button></p>}
         {playback.status === "blocked" && <p className="api-state narration-start-hint" role="status">{t("tapToListen")}<button type="button" onClick={() => player.play()}>{t("playNarration")}</button></p>}
-        {!loading && !error && pois.length === 0 && (
+        {!loading && !error && location && pois.length === 0 && (
           <p className="api-state">{t("noNearby")}</p>
         )}
         <div className="nearby-list">
@@ -326,9 +301,16 @@ function RouteScreen({ setScreen, location, language, onLanguageChange, onStartR
 export default function VoiceMapScreens() {
   const [screen, setScreen] = useState("map");
   const [journey, setJourney] = useState(null);
+  const [progressSaved, setProgressSaved] = useState(true);
+  useEffect(() => {
+    if (!journey) return;
+    try { setProgressSaved(saveJourney(window.localStorage, journey)); }
+    catch { setProgressSaved(false); }
+  }, [journey]);
   const [catalog, setCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [audioBackScreen, setAudioBackScreen] = useState("map");
   const [routeReturnDraft, setRouteReturnDraft] = useState(null);
   const [language, setLanguage] = useState(() => {
@@ -337,7 +319,7 @@ export default function VoiceMapScreens() {
       return Object.hasOwn(guestCatalogs, saved) ? saved : "vi";
     } catch { return "vi"; }
   });
-  const { position: location, gpsError } = useTourLocation();
+  const { position: location, gpsError, retryGps } = useTourLocation(language);
   const { player, playback } = useTourNarration(location, catalog, language);
   useEffect(() => {
     void recordAppOpen().catch(() => {});
@@ -351,23 +333,23 @@ export default function VoiceMapScreens() {
     let active = true;
     let request;
     const load = () => {
-      request?.abort(); request = new AbortController();
-      fetch(`${API_BASE}/api/public/pois`, { signal: request.signal, cache: "no-store" })
+      request?.abort(); const controller = new AbortController(); request = controller;
+      fetch(`${API_BASE}/api/public/pois`, { signal: controller.signal, cache: "no-store" })
         .then(async (response) => {
           const data = await response.json();
           if (!response.ok || !Array.isArray(data)) throw new Error("Không tải được danh sách POI từ backend.");
-          if (active) { setCatalog(data.filter(validPoi)); setCatalogError(""); }
-        }).catch((reason) => { if (active && reason.name !== "AbortError") { setCatalogError(reason.message); setCatalog([]); } })
-        .finally(() => { if (active) setLoading(false); });
+          if (active && !controller.signal.aborted) { setCatalog(data.filter(validPoi)); setCatalogError(""); }
+        }).catch((reason) => { if (active && !controller.signal.aborted && reason.name !== "AbortError") { setCatalogError(reason.message); setCatalog([]); } })
+        .finally(() => { if (active && !controller.signal.aborted) setLoading(false); });
     };
     load();
     const timer = window.setInterval(() => { if (!document.hidden) load(); }, 30000);
     const onVisible = () => { if (!document.hidden) load(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { active = false; request?.abort(); window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, []);
-  const mapPois = useMemo(() => catalog.map((poi) => ({ poi, distanceMeters: location ? distanceMeters(location, poi) : undefined })), [catalog, location]);
-  const pois = useMemo(() => mapPois.filter((item) => item.distanceMeters <= 500)
+  }, [catalogAttempt]);
+  const mapPois = useMemo(() => guestPoiItems(catalog, location), [catalog, location]);
+  const pois = useMemo(() => mapPois.filter((item) => item.nearby)
     .sort((a, b) => a.distanceMeters - b.distanceMeters), [mapPois]);
   const navigate = useCallback((nextScreen, poiId, backScreen = "map") => {
     // Leaving the narration screen must cancel both active media and an in-flight guide request.
@@ -393,20 +375,27 @@ export default function VoiceMapScreens() {
     setLanguage(code);
     try { window.localStorage.setItem("voicemap-guest-language", code); } catch { /* Private mode may disable storage. */ }
     if (screen === "audio" && current.poiId != null) {
-      void player.load(current.poiId, code, { trigger: "TAP_POI" });
+      void player.load(current.poiId, code, { trigger: "TAP_POI", autoplay: ["playing", "starting"].includes(current.status) });
     } else {
       player.stop(false);
     }
   };
   return <div className="demo-shell tourist-shell" lang={language}><div className="tourist-frame">
-    {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError ? (language === "vi" ? catalogError : guestText(language, "requestFailed")) : gpsError ? (language === "vi" ? gpsError : guestText(language, "locationUnavailable")) : ""} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
+    {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError ? guestText(language, "requestFailed") : ""}
+      gpsError={gpsError} retryGps={retryGps} retryCatalog={() => { setLoading(true); setCatalogAttempt(value => value + 1); }} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
     {screen === "audio" && <NarrationAudioScreen player={player} playback={playback} setScreen={navigate} location={location} pois={mapPois} language={language} onLanguageChange={changeLanguage} backScreen={audioBackScreen} MapComponent={MapArtwork} formatPoiName={localizedPoiName} />}
     {screen === "route" && <RouteScreen setScreen={navigate} location={location} language={language} onLanguageChange={changeLanguage}
       returnDraft={routeReturnDraft} onPreviewAudio={previewAudio}
-      onStartRoute={(value) => { setRouteReturnDraft(null); setJourney({ ...value, index: 0 }); setScreen("journey"); }} />}
-    {screen === "journey" && journey && <RouteJourney journey={journey} initialLocation={location} gpsError={gpsError} language={language} onLanguageChange={changeLanguage} formatPoiName={localizedPoiName}
-      audioBusy={["loading", "starting", "playing", "paused"].includes(playback.status)}
-      onProgress={(index) => setJourney((current) => ({ ...current, index }))}
+      onStartRoute={(value) => {
+        let restored;
+        try { restored = restoreJourney(window.localStorage, value); } catch { /* Storage may be blocked. */ }
+        setRouteReturnDraft(null);
+        setJourney(restored && restored.index < restored.pois.length ? restored : createJourney(value));
+        setScreen("journey");
+      }} />}
+    {journey && (screen === "journey" || screen === "audio" && audioBackScreen === "journey") && <RouteJourney journey={journey} initialLocation={location} gpsError={gpsError} language={language} onLanguageChange={changeLanguage} formatPoiName={localizedPoiName}
+      hidden={screen !== "journey"} progressSaved={progressSaved}
+      onProgress={(index, outcome) => setJourney((current) => advanceJourney(current, index, outcome))}
       onAudio={(id) => navigate("audio", id, "journey")}
       onExit={() => { setJourney(null); setScreen("route"); }} />}
   </div></div>;

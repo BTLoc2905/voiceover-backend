@@ -113,5 +113,16 @@
   "stopNavigation": "Stop navigation · back to list",
   "requestFailed": "Could not load data. Please try again.",
   "narrationFailed": "Could not load narration. Please try again.",
-  "locationUnavailable": "Your location is unavailable. You can still select a place on the map."
+  "locationUnavailable": "Your location is unavailable. You can still select a place on the map.",
+  "tapToPlay": "Tap to listen",
+  "audioUnavailable": "Audio is unavailable. You can still read the narration.",
+  "fallbackAudio": "Audio in the selected language is unavailable. Using fallback audio",
+  "skipped": "Skipped",
+  "notVisited": "Not visited",
+  "journeyCompleted": "Journey finished",
+  "progressNotSaved": "Progress could not be saved on this device. It is available only for this visit.",
+  "gpsDenied": "Location access denied. You can still choose places on the map. Enable location in browser settings and retry.",
+  "gpsWeak": "Weak GPS signal. Location is approximate; automatic narration is paused.",
+  "descriptionFallback": "Showing the original description",
+  "mapUnavailable": "Map tiles could not load. Check your network connection."
 }

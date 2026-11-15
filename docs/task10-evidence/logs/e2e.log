@@ -1,0 +1,22 @@
+
+> voiceover-frontend@0.0.0 test:e2e
+> node --test e2e/task10.e2e.mjs
+
+▶ Task 10: Admin content, guest journey, and Monitoring use isolated MySQL
+  ✔ UC05–UC08 Admin creates, reviews and publishes content (2219.7245ms)
+  ✔ UC09 Admin Route and UC01–UC04 guest GPS journey (10033.2641ms)
+  ✔ UC10 Monitoring matches MySQL events within ten seconds (624.5056ms)
+  ✔ GPS denied/weak, blocked autoplay, API outage and invalid storage recover visibly (11870.6983ms)
+  ✔ Admin manual translation becomes STALE after source edit (1239.3943ms)
+  ✔ Failed TTS task is visible and succeeds after explicit retry (2656.6799ms)
+  ✔ Directions failure, missing selected-language audio and MySQL alert recover (345.2954ms)
+  ✔ Responsive guest map at 320, 390 and 768 pixels (4253.1729ms)
+✔ Task 10: Admin content, guest journey, and Monitoring use isolated MySQL (53593.9774ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54218.1199

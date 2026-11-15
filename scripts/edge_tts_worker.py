@@ -21,8 +21,10 @@ class AudioRetriesExhausted(Exception):
     """The service returned no audio on every bounded attempt."""
 
 
-async def synthesize(text: str, voice: str, output: Path) -> dict:
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+async def synthesize(text: str, voice: str, output: Path, max_attempts: int = MAX_ATTEMPTS) -> dict:
+    if not 1 <= max_attempts <= MAX_ATTEMPTS:
+        raise ValueError("attempts must be between 1 and 3")
+    for attempt in range(1, max_attempts + 1):
         try:
             # A Communicate instance can only stream once. Restart the full text
             # into a new file, including when a later text chunk failed.
@@ -34,9 +36,12 @@ async def synthesize(text: str, voice: str, output: Path) -> dict:
             return {"durationSec": max(1, math.ceil(duration)), "bytes": size, "attempts": attempt}
         except NoAudioReceived as error:
             output.unlink(missing_ok=True)
-            if attempt == MAX_ATTEMPTS:
+            if max_attempts == 1:
+                # Java persists the attempt budget and owns retries across worker restarts.
+                raise
+            if attempt == max_attempts:
                 raise AudioRetriesExhausted(
-                    f"Edge-TTS không trả âm thanh sau {MAX_ATTEMPTS} lần với giọng {voice}. "
+                    f"Edge-TTS không trả âm thanh sau {max_attempts} lần với giọng {voice}. "
                     "Dịch vụ có thể tạm thời không khả dụng; hãy thử lại sau."
                 ) from error
             await asyncio.sleep(attempt)
@@ -51,12 +56,13 @@ def main() -> int:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--voice", required=True)
+    parser.add_argument("--attempts", type=int, choices=range(1, MAX_ATTEMPTS + 1), default=MAX_ATTEMPTS)
     args = parser.parse_args()
     try:
         text = args.input.read_text(encoding="utf-8").strip()
         if not text:
             raise ValueError("Nội dung TTS rỗng")
-        metadata = asyncio.run(synthesize(text, args.voice, args.output))
+        metadata = asyncio.run(synthesize(text, args.voice, args.output, args.attempts))
         print(json.dumps(metadata))
         return 0
     except AudioRetriesExhausted as error:

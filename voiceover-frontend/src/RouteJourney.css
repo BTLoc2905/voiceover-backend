@@ -190,6 +190,9 @@
 }
 
 .route-journey .journey-stops li.visited { color: #64748b; }
+.route-journey .journey-stops li.skipped { color: #9a3412; }
+.route-journey .ordered-marker.visited span { background: #15803d; }
+.route-journey .ordered-marker.skipped span { background: #9a3412; }
 .route-journey .journey-stop-number { flex: none; }
 
 .route-journey .journey-footer {

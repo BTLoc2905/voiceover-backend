@@ -105,17 +105,8 @@ public class PipelineService {
         }
 
         // Thay thế các từ khóa cần bảo vệ bằng token __PT_0__, __PT_1__ trước khi gửi dịch
-        String maskedText = sourceText;
-        Map<String, String> tokenMap = new LinkedHashMap<>();
-        int idx = 0;
-        for (String term : terms) {
-            if (term != null && !term.isBlank() && maskedText.contains(term)) {
-                String token = "PTERM" + idx + "X";
-                tokenMap.put(token, term);
-                maskedText = maskedText.replace(term, token);
-                idx++;
-            }
-        }
+        ProtectedTerms protectedText = new ProtectedTerms(sourceText, terms);
+        String maskedText = protectedText.masked();
 
         if (!googleCloudApiKey.isBlank()) {
             String body = objectMapper.writeValueAsString(Map.of("q", maskedText,
@@ -134,10 +125,7 @@ public class PipelineService {
             String translated = objectMapper.readTree(cloudResponse.body())
                     .path("data").path("translations").path(0).path("translatedText").asText();
             if (translated.isBlank()) throw new IOException("Google Cloud Translation không trả nội dung bản dịch.");
-            for (Map.Entry<String, String> entry : tokenMap.entrySet()) {
-                translated = translated.replace(entry.getKey(), entry.getValue());
-            }
-            return translated;
+            return protectedText.restore(translated);
         }
 
         String url = unofficialTranslationUrl + "?client=gtx&sl="
@@ -170,10 +158,7 @@ public class PipelineService {
         String translated = sb.toString();
         if (translated.isBlank()) throw new IOException("Dịch vụ dịch không trả nội dung bản dịch.");
         // Khôi phục lại chính xác các thuật ngữ bảo vệ (protected_terms)
-        for (Map.Entry<String, String> entry : tokenMap.entrySet()) {
-            translated = translated.replace(entry.getKey(), entry.getValue());
-        }
-        return translated;
+        return protectedText.restore(translated);
     }
 
 }

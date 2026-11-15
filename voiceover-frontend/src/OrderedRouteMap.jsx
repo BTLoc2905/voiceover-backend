@@ -3,17 +3,23 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./SessionRoutes.css";
 import { guestText } from "./guestUi.js";
+import { getGuide } from "./narrationApi.js";
+import { PoiDetailsLoader } from "./guestPoi.js";
+import { createPoiCard } from "./poiCard.js";
 
-export default function OrderedRouteMap({ pois, geometry, activeGeometry, selectedIndex, onSelect, onListen, location, controllerRef, language = "vi", formatPoiName = (name) => name }) {
+export default function OrderedRouteMap({ pois, geometry, activeGeometry, selectedIndex, stopStatuses, onSelect, onListen, location, controllerRef, language = "vi", formatPoiName = (name) => name }) {
   const container = useRef(null);
   const map = useRef(null);
   const select = useRef(onSelect);
   const listen = useRef(onListen);
   const locationLayer = useRef(null);
+  const details = useRef(null);
+  if (!details.current) details.current = new PoiDetailsLoader(getGuide);
+  useEffect(() => { details.current.setLanguage(language); return () => details.current.clear(); }, [language]);
   useEffect(() => { select.current = onSelect; }, [onSelect]);
   useEffect(() => { listen.current = onListen; }, [onListen]);
   useEffect(() => {
-    const instance = L.map(container.current).setView([10.7769, 106.7009], 13);
+    const instance = L.map(container.current, { zoomAnimation: false, fadeAnimation: false }).setView([10.7769, 106.7009], 13);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19,
     }).addTo(instance);
@@ -30,6 +36,7 @@ export default function OrderedRouteMap({ pois, geometry, activeGeometry, select
     observer.observe(container.current);
     return () => {
       observer.disconnect();
+      instance.stop();
       instance.remove();
       if (controllerRef) controllerRef.current = null;
       map.current = null;
@@ -44,28 +51,21 @@ export default function OrderedRouteMap({ pois, geometry, activeGeometry, select
       const label = document.createElement("span"); label.textContent = `${index + 1}. ${name}`;
       const marker = L.marker([Number(poi.latitude), Number(poi.longitude)], {
         title: `${index + 1}. ${name}`, keyboard: true,
-        icon: L.divIcon({ className: `ordered-marker${selectedIndex === index ? " selected" : ""}`,
+        icon: L.divIcon({ className: `ordered-marker${selectedIndex === index ? " selected" : ""}${stopStatuses ? ` ${stopStatuses[index]?.toLowerCase()}` : ""}`,
           html: `<span>${index + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }),
       }).bindTooltip(label).addTo(group);
       if (listen.current) {
-        const popup = document.createElement("div");
-        popup.textContent = name;
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "map-listen-button";
-        button.textContent = guestText(language, "listenToNarration");
-        button.addEventListener("click", () => listen.current?.(poi.id));
-        popup.append(document.createElement("br"), button);
-        marker.bindPopup(popup);
+        const card = createPoiCard({ poi, name, language, loader: details.current, onListen: id => listen.current?.(id) });
+        marker.bindPopup(card.entry); marker.on("popupopen", card.load);
       }
       marker.on("click", () => select.current?.(index));
       if (selectedIndex === index) marker.openTooltip();
     });
     if (geometry?.type === "LineString") L.geoJSON(geometry, { style: { color: "#356ff2", weight: 5 } }).addTo(group);
     if (activeGeometry?.type === "LineString") L.geoJSON(activeGeometry, { style: { color: "#f97316", weight: 7 } }).addTo(group);
-    if (group.getBounds().isValid()) instance.fitBounds(group.getBounds(), { padding: [35, 35], maxZoom: 16, animate: false });
+    if (group.getBounds().isValid() && instance.getSize().x > 0 && instance.getSize().y > 0) instance.fitBounds(group.getBounds(), { padding: [35, 35], maxZoom: 16, animate: false });
     return () => group.remove();
-  }, [pois, geometry, activeGeometry, selectedIndex, language, formatPoiName]);
+  }, [pois, geometry, activeGeometry, selectedIndex, stopStatuses, language, formatPoiName]);
   useEffect(() => {
     const instance = map.current;
     locationLayer.current?.remove();

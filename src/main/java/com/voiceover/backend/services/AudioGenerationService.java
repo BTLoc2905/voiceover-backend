@@ -186,7 +186,7 @@ public class AudioGenerationService {
         try {
             Files.writeString(input, text, StandardCharsets.UTF_8);
             process = new ProcessBuilder(python, worker.toString(), "--input", input.toString(),
-                    "--output", temporary.toString(), "--voice", voice).redirectErrorStream(true).start();
+                    "--output", temporary.toString(), "--voice", voice, "--attempts", "1").redirectErrorStream(true).start();
             if (!process.waitFor(edgeTimeoutSeconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS);
                 throw new IOException("Edge-TTS quá thời gian " + edgeTimeoutSeconds + " giây.");
