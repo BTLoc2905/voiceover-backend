@@ -60,7 +60,7 @@ test('Task 10: Admin content, guest journey, and Monitoring use isolated MySQL',
     await adminPage.getByLabel('Chọn POI kiểm duyệt').selectOption(String(firstId));
     await adminPage.getByRole('button', { name: /English.*Bản dịch/ }).click();
     await adminPage.getByText('Có file audio của bản dịch đã lưu.').waitFor();
-    assert.ok((await adminPage.locator('#review-content').inputValue()).includes('[en]'));
+    await until(async () => (await adminPage.locator('#review-content').inputValue()).includes('[en]'), 10000);
     await adminPage.screenshot({ path: `${h.artifacts}/admin-review.png`, fullPage: true });
     await adminPage.getByRole('button', { name: /POI Management/ }).click();
     await adminPage.getByRole('button', { name: 'Sửa Task 10 Museum' }).click();

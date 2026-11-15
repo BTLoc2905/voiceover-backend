@@ -75,15 +75,18 @@ This restores the exact previous SHA image refs, waits for health and re-runs th
 
 ## Acceptance status
 
-Changed files: `.github/workflows/deploy.yml`, `compose.staging.yaml`, `compose.yaml`, `.env.example`, `scripts/deploy/verify_release.py`, `scripts/deploy/staging.py`, `scripts/deploy/smoke.sh`, their Python tests, this runbook and the implementation plan. No existing test file was removed.
+Changed files: `.github/workflows/deploy.yml`, `compose.staging.yaml`, `compose.yaml`, `.env.example`, `scripts/deploy/verify_release.py`, `scripts/deploy/staging.py`, `scripts/deploy/smoke.sh`, their Python tests, `voiceover-frontend/e2e/task10.e2e.mjs`, this runbook and the implementation plan. No existing test file was removed.
 
 | Check | Status |
 | --- | --- |
 | PR #26 included in source; separate Task 11 branch | PASS |
 | Release gate, SHA image/rollback policy unit tests | PASS — 13/13 locally and in PR validation |
 | Disposable Docker build, Compose and basic smoke | PASS — GitHub Actions run 43684363022, Flyway rank 20 |
+| Existing Task 10 E2E regression after synchronization fix | PASS locally — 9/9 against isolated MySQL and browser |
 | Manual `workflow_dispatch` availability | NOT TESTED — workflow must first be promoted to default branch `main` through review |
 | Real Staging deployment, full smoke, backup and rollback rehearsal | NOT TESTED — no approved Staging host/configuration supplied |
 | Production deployment | NOT TESTED — outside Task 11 Staging workflow |
+
+One CI rerun ([43684889431](https://github.com/BTLoc2905/voiceover-backend/actions/runs/43684889431)) exposed an existing Task 10 E2E timing race: the review page displayed the English audio status before the English textarea finished updating. The assertion now waits for the English text itself. Backend package/tests passed (147 total, 18 opt-in skipped), and the complete browser E2E suite passed locally (9/9) after the fix. This was test synchronization, with no application-code change.
 
 Remaining deployment gaps: the group must promote the workflow to default branch `main` through review and provide a Staging host, protected GitHub Environment, SSH secrets, server `.env` files and an Admin bootstrap for a fresh database. Live translation pipeline, live TTS, backup restoration and rollback rehearsal require that approved environment. No high-severity application issue was found in the disposable Compose smoke.
