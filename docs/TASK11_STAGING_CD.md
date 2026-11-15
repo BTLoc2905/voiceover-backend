@@ -20,12 +20,13 @@ Date: 2026-11-15. The branch starts from `develop` at `9aa6446`, which includes 
 3. Create `/opt/voicemap/.env.smoke` with Bash-quoted `STAGING_ADMIN_EMAIL` and `STAGING_ADMIN_PASSWORD` for a dedicated ACTIVE Admin account in the Staging database; run `chmod 600`. The full smoke script logs in to Monitoring without printing credentials. **A fresh empty database needs an approved one-time Admin bootstrap after Flyway initializes it.** This workflow does not create an Admin account; do not approve its first deployment until the group has planned that bootstrap, or the Monitoring smoke will fail.
 4. Log in to GHCR **on the server** using a read-only `read:packages` credential via `docker login ghcr.io --username <account> --password-stdin`. Keep that credential in the server's Docker credential store. The workflow does not transmit a GHCR token to the server.
 5. In GitHub Settings → Environments, configure `staging` with **required reviewers**, **prevent self review**, and deployment branches restricted to `develop`. Configure environment secrets `STAGING_HOST`, `STAGING_USER`, `STAGING_SSH_KEY` and `STAGING_HOST_KEY` (the pinned OpenSSH known-hosts line for the host). The workflow refuses release if these protection rules or the exact commit's push CI are absent.
+6. The repository's default branch is `main`. After this Task 11 PR is merged into `develop`, promote the reviewed workflow to `main` through a **separate reviewed PR**. GitHub requires a `workflow_dispatch` workflow file on the default branch before its manual Run workflow button becomes available. Then select `develop` in the branch dropdown; the release gate still verifies that branch's exact push CI. Do not push directly to either branch. See [GitHub's manual workflow rules](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 
 The frontend's `FRONTEND_BIND=127.0.0.1` keeps port 8088 local to the server; put TLS or VPN in front of it. Backend and MySQL have no host-published ports. Restrict SSH and the server's `.env` files to trusted operators.
 
 ## Run a release
 
-1. Merge the reviewed PR into `develop`, wait for **VoiceMap CI** on that exact merge SHA to pass `backend-test`, `frontend-test`, `python-test`, `mysql-integration-test` and `e2e-test`.
+1. Merge the reviewed PR into `develop`, promote the workflow to default branch `main` by reviewed PR, then wait for **VoiceMap CI** on the exact `develop` SHA to pass `backend-test`, `frontend-test`, `python-test`, `mysql-integration-test` and `e2e-test`.
 2. Open **Actions → VoiceMap Staging CD → Run workflow**, select `develop`. The release gate checks the exact dispatch SHA and CI job conclusions. The workflow builds and publishes Backend and Frontend images to GHCR using the full SHA tag.
 3. A required reviewer approves the `staging` deployment. The workflow uses pinned-host-key SSH, copies only reviewed Compose/script files, and invokes `/opt/voicemap/staging.py deploy` on the host. It does not copy `.env` or `.env.smoke`.
 4. The server records prior image refs, backs up MySQL to `/opt/voicemap/backups/`, pulls the two SHA images, starts the stack without rebuilding, waits for healthy containers and runs `smoke.sh full`.
@@ -81,7 +82,8 @@ Changed files: `.github/workflows/deploy.yml`, `compose.staging.yaml`, `compose.
 | PR #26 included in source; separate Task 11 branch | PASS |
 | Release gate, SHA image/rollback policy unit tests | PASS — 13/13 locally and in PR validation |
 | Disposable Docker build, Compose and basic smoke | PASS — GitHub Actions run 43684363022, Flyway rank 20 |
+| Manual `workflow_dispatch` availability | NOT TESTED — workflow must first be promoted to default branch `main` through review |
 | Real Staging deployment, full smoke, backup and rollback rehearsal | NOT TESTED — no approved Staging host/configuration supplied |
 | Production deployment | NOT TESTED — outside Task 11 Staging workflow |
 
-Remaining deployment gaps: the group must provide a Staging host, protected GitHub Environment, SSH secrets, server `.env` files and an Admin bootstrap for a fresh database. Live translation pipeline, live TTS, backup restoration and rollback rehearsal require that approved environment. No high-severity application issue was found in the disposable Compose smoke.
+Remaining deployment gaps: the group must promote the workflow to default branch `main` through review and provide a Staging host, protected GitHub Environment, SSH secrets, server `.env` files and an Admin bootstrap for a fresh database. Live translation pipeline, live TTS, backup restoration and rollback rehearsal require that approved environment. No high-severity application issue was found in the disposable Compose smoke.
