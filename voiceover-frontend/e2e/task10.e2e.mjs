@@ -167,6 +167,34 @@ test('Task 10: Admin content, guest journey, and Monitoring use isolated MySQL',
     await brokenContext.close();
   });
 
+  await t.test('GPS signal loss expires the last fix and a new fix restores the map', async () => {
+    const before = (await sql(h.db, "SELECT COUNT(*) total FROM usage_event WHERE event_type = 'AUTO_PLAY'"))[0].total;
+    const context = await h.browser.newContext({ viewport: { width: 390, height: 844 } });
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
+        watchPosition(success) {
+          window.__sendTask10Gps = () => success({
+            coords: { latitude: 10.7850, longitude: 106.7100, accuracy: 10 }, timestamp: Date.now(),
+          });
+          window.__sendTask10Gps();
+          return 1;
+        },
+        clearWatch() {},
+      } });
+    });
+    try {
+      const page = await context.newPage();
+      await page.goto(h.baseUrl);
+      await page.waitForFunction(() => typeof window.__sendTask10Gps === 'function');
+      await page.getByRole('button', { name: /Xem lộ trình gợi ý/ }).waitFor();
+      await page.getByText(/Không lấy được vị trí/).waitFor({ timeout: 10000 });
+      await page.screenshot({ path: `${h.artifacts}/guest-gps-lost.png`, fullPage: true });
+      assert.equal((await sql(h.db, "SELECT COUNT(*) total FROM usage_event WHERE event_type = 'AUTO_PLAY'"))[0].total, before);
+      await page.evaluate(() => window.__sendTask10Gps());
+      await page.getByText(/Không lấy được vị trí/).waitFor({ state: 'hidden' });
+    } finally { await context.close(); }
+  });
+
   await t.test('Admin manual translation becomes STALE after source edit', async () => {
     const created = await adminContext.request.post(`${h.baseUrl}/api/admin/pois`, { data: {
       name: 'Task 10 Review Draft', latitude: '10.7781', longitude: '106.7021', radiusM: 50,

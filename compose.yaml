@@ -72,6 +72,8 @@ services:
     build:
       context: ./voiceover-frontend
       dockerfile: Dockerfile
+      args:
+        VITE_GPS_DEMO: ${VITE_GPS_DEMO:-false}
     restart: unless-stopped
     depends_on:
       backend:

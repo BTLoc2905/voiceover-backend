@@ -6,6 +6,7 @@ import { guestText } from "./guestUi.js";
 import { getGuide } from "./narrationApi.js";
 import { PoiDetailsLoader } from "./guestPoi.js";
 import { createPoiCard } from "./poiCard.js";
+import { demoGps } from "./demoGps.js";
 
 export default function OrderedRouteMap({ pois, geometry, activeGeometry, selectedIndex, stopStatuses, onSelect, onListen, location, controllerRef, language = "vi", formatPoiName = (name) => name }) {
   const container = useRef(null);
@@ -24,6 +25,7 @@ export default function OrderedRouteMap({ pois, geometry, activeGeometry, select
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19,
     }).addTo(instance);
     map.current = instance;
+    instance.on("click", event => { if (listen.current) demoGps.pickOnMap(event.latlng.lat, event.latlng.lng); });
     if (controllerRef) {
       controllerRef.current = {
         locate: (position) => {

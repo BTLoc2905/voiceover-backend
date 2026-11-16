@@ -167,11 +167,11 @@ jobs:
           E2E_MYSQL_PASSWORD: voiceover-ci-root
           E2E_ARTIFACT_DIR: e2e-artifacts
         run: npm run test:e2e
-      - name: Upload E2E screenshots on failure
-        if: failure()
+      - name: Upload E2E screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: task10-e2e-failure
+          name: task10-e2e-evidence
           path: voiceover-frontend/e2e-artifacts/
           if-no-files-found: ignore
 

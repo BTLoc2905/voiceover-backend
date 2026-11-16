@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import OrderedRouteMap from "./OrderedRouteMap.jsx";
+import { GpsDemoButton } from "./GpsDemoPanel.jsx";
 import LanguagePicker from "./LanguagePicker.jsx";
 import { guestText } from "./guestUi.js";
 import { walkingDistance } from "./routePlan.js";
@@ -100,6 +101,7 @@ export default function RouteJourney({ journey, onProgress, onAudio, onExit, ini
         disabled={!reliableFix} onClick={() => mapController.current?.locate(position)}>
         <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" /><path d="M12 2v3m0 14v3M2 12h3m14 0h3" /><circle cx="12" cy="12" r="2" /></svg>
       </button>
+      <GpsDemoButton className="journey-gps-demo-button" />
     </div>
     <section className="journey-content">
       <button type="button" className="journey-sheet-drag" aria-label={t("routePreviewMap")}
