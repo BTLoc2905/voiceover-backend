@@ -16,6 +16,7 @@ import { guestText } from "./guestUi.js";
 import { recordRouteSelection } from "./narrationApi.js";
 import { reliableJourneyFix } from "./routeJourney.js";
 import "./RoutePlanner.css";
+import { guestStorage } from "./demoGps.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -127,7 +128,7 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
         }
       }
       let saved = null;
-      try { saved = readPersonalRoute(window.localStorage); } catch { /* Storage can be disabled by the browser. */ }
+      try { saved = readPersonalRoute(guestStorage()); } catch { /* Storage can be disabled by the browser. */ }
       if (saved && publishedRoutes.some((route) => route.id === saved.sourceRouteId)) {
         const restored = saved.poiIds.map((id) => usable.find((poi) => poi.id === id));
         const availableStops = restored.filter(Boolean);
@@ -215,7 +216,7 @@ export default function RoutePlanner({ setScreen, location, language, onLanguage
       }), draft.pois);
       if (controller.signal.aborted) return;
       const confirmed = { ...draft, pois: result.pois };
-      try { savePersonalRoute(window.localStorage, confirmed); }
+      try { savePersonalRoute(guestStorage(), confirmed); }
       catch { throw new Error("Không lưu được lộ trình trên thiết bị này. Hãy cho phép lưu dữ liệu và thử lại."); }
       const requestKey = previewKeyFor(confirmed.pois, retry);
       confirmedPreview.current = { stops: confirmed.pois, requestKey };

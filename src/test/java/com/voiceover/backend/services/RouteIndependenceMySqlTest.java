@@ -48,7 +48,9 @@ class RouteIndependenceMySqlTest {
         jdbc.update("INSERT INTO route (route_id, session_id, name, status) VALUES (91, 72, 'Legacy published route', 'PUBLISHED'), (92, 72, 'Legacy closed route', 'CLOSED')");
         jdbc.update("INSERT INTO route_stop (routestop_id, route_id, poi_id, stop_order) VALUES (801, 91, 12, 1), (802, 91, 11, 2)");
         originalStops = jdbc.queryForList("SELECT * FROM route_stop ORDER BY routestop_id");
-        assertEquals(1, Flyway.configure().dataSource(source).load().migrate().migrationsExecuted);
+        // Assert only the Route upgrade; later migrations must not change this expectation.
+        assertEquals(1, Flyway.configure().dataSource(source).target("20").load().migrate().migrationsExecuted);
+        Flyway.configure().dataSource(source).load().migrate();
         context = new AnnotationConfigApplicationContext();
         context.registerBean(DataSource.class, () -> source);
         context.register(PoiHiddenMySqlTest.PoiConfig.class, RouteConfig.class);

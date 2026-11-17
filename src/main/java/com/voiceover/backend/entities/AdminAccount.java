@@ -18,6 +18,10 @@ public class AdminAccount {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "password_changed_at", nullable = false)
+    @Builder.Default
+    private java.time.LocalDateTime passwordChangedAt = java.time.LocalDateTime.now(java.time.Clock.systemUTC());
+
     @Column(name = "full_name", nullable = false)
     private String fullName;
 

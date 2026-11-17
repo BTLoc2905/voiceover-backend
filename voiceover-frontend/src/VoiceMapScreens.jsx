@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import markerIconUrl from "leaflet/dist/images/marker-icon.png";
+import markerRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
+import markerShadowUrl from "leaflet/dist/images/marker-shadow.png";
 import "./VoiceMapScreens.css";
 import RoutePlanner from "./RoutePlanner.jsx";
 import RouteJourney from "./RouteJourney.jsx";
@@ -16,6 +19,8 @@ import { guestPoiItems, PoiDetailsLoader } from "./guestPoi.js";
 import { createPoiCard } from "./poiCard.js";
 import { advanceJourney, createJourney, restoreJourney, saveJourney } from "./routeJourney.js";
 import "./AutoNarration.css";
+import GpsDemoPanel, { GpsDemoButton } from "./GpsDemoPanel.jsx";
+import { demoGps, guestStorage } from "./demoGps.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const POI_NAMES = {
@@ -82,6 +87,7 @@ function MapArtwork({ location, pois = [], controllerRef, language = "vi", route
     tiles.on("tileerror", () => setTileError(true));
     tiles.on("tileload", () => setTileError(false));
     mapInstance.current = map;
+    map.on("click", event => demoGps.pickOnMap(event.latlng.lat, event.latlng.lng));
     if (controllerRef) {
       controllerRef.current = {
         zoomIn: () => map.zoomIn(),
@@ -166,7 +172,12 @@ function MapArtwork({ location, pois = [], controllerRef, language = "vi", route
       } : {
         title: siblings.map((sibling) => localizedPoiName(sibling.poi.name, language)).join(" · "),
         alt: siblings.map((sibling) => localizedPoiName(sibling.poi.name, language)).join(" · "),
-        icon: new L.Icon.Default({ className: `guest-poi-marker${item.nearby ? " nearby" : ""}` }),
+        icon: L.icon({
+          iconUrl: markerIconUrl, iconRetinaUrl: markerRetinaUrl, shadowUrl: markerShadowUrl,
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
+          tooltipAnchor: [16, -28], shadowSize: [41, 41],
+          className: `guest-poi-marker${item.nearby ? " nearby" : ""}`,
+        }),
         ...(siblings.length > 1 ? { icon: L.divIcon({ className: `poi-map-group-marker${item.nearby ? " nearby" : ""}`, html: `<span>${siblings.length}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) } : {}),
       };
       const marker = L.marker(poiPosition, markerOptions)
@@ -201,7 +212,8 @@ function MapArtwork({ location, pois = [], controllerRef, language = "vi", route
         <button aria-label={t("zoomIn")} onClick={() => controllerRef?.current?.zoomIn()}>＋</button>
         <button aria-label={t("zoomOut")} onClick={() => controllerRef?.current?.zoomOut()}>−</button>
         <button aria-label={t("goToLocation")} disabled={!location} onClick={() => controllerRef?.current?.locate()}>◎</button>
-        {fitAllPois && <button aria-label={t("showAllPlaces")} title={t("showAllPlaces")} onClick={() => controllerRef?.current?.showPois()}>▦</button>}
+        <button aria-label={t("showAllPlaces")} title={t("showAllPlaces")} onClick={() => controllerRef?.current?.showPois()}>▦</button>
+        <GpsDemoButton />
       </div>
     </div>
   );
@@ -304,7 +316,7 @@ export default function VoiceMapScreens() {
   const [progressSaved, setProgressSaved] = useState(true);
   useEffect(() => {
     if (!journey) return;
-    try { setProgressSaved(saveJourney(window.localStorage, journey)); }
+    try { setProgressSaved(saveJourney(guestStorage(), journey)); }
     catch { setProgressSaved(false); }
   }, [journey]);
   const [catalog, setCatalog] = useState([]);
@@ -315,7 +327,7 @@ export default function VoiceMapScreens() {
   const [routeReturnDraft, setRouteReturnDraft] = useState(null);
   const [language, setLanguage] = useState(() => {
     try {
-      const saved = window.localStorage.getItem("voicemap-guest-language");
+      const saved = guestStorage().getItem("voicemap-guest-language");
       return Object.hasOwn(guestCatalogs, saved) ? saved : "vi";
     } catch { return "vi"; }
   });
@@ -373,7 +385,7 @@ export default function VoiceMapScreens() {
     if (!Object.hasOwn(guestCatalogs, code)) return;
     const current = player.getSnapshot();
     setLanguage(code);
-    try { window.localStorage.setItem("voicemap-guest-language", code); } catch { /* Private mode may disable storage. */ }
+    try { guestStorage().setItem("voicemap-guest-language", code); } catch { /* Private mode may disable storage. */ }
     if (screen === "audio" && current.poiId != null) {
       void player.load(current.poiId, code, { trigger: "TAP_POI", autoplay: ["playing", "starting"].includes(current.status) });
     } else {
@@ -381,6 +393,7 @@ export default function VoiceMapScreens() {
     }
   };
   return <div className="demo-shell tourist-shell" lang={language}><div className="tourist-frame">
+    <GpsDemoPanel pois={journey ? journey.pois.slice(journey.index) : catalog}>
     {screen === "map" && <NearbyScreen setScreen={navigate} pois={pois} mapPois={mapPois} loading={loading} error={catalogError ? guestText(language, "requestFailed") : ""}
       gpsError={gpsError} retryGps={retryGps} retryCatalog={() => { setLoading(true); setCatalogAttempt(value => value + 1); }} location={location} language={language} setLanguage={changeLanguage} playback={playback} player={player} />}
     {screen === "audio" && <NarrationAudioScreen player={player} playback={playback} setScreen={navigate} location={location} pois={mapPois} language={language} onLanguageChange={changeLanguage} backScreen={audioBackScreen} MapComponent={MapArtwork} formatPoiName={localizedPoiName} />}
@@ -388,7 +401,7 @@ export default function VoiceMapScreens() {
       returnDraft={routeReturnDraft} onPreviewAudio={previewAudio}
       onStartRoute={(value) => {
         let restored;
-        try { restored = restoreJourney(window.localStorage, value); } catch { /* Storage may be blocked. */ }
+        try { restored = restoreJourney(guestStorage(), value); } catch { /* Storage may be blocked. */ }
         setRouteReturnDraft(null);
         setJourney(restored && restored.index < restored.pois.length ? restored : createJourney(value));
         setScreen("journey");
@@ -398,5 +411,6 @@ export default function VoiceMapScreens() {
       onProgress={(index, outcome) => setJourney((current) => advanceJourney(current, index, outcome))}
       onAudio={(id) => navigate("audio", id, "journey")}
       onExit={() => { setJourney(null); setScreen("route"); }} />}
+    </GpsDemoPanel>
   </div></div>;
 }
