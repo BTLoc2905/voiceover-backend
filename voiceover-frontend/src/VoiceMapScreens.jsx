@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import markerIconUrl from "leaflet/dist/images/marker-icon.png";
+import markerRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
+import markerShadowUrl from "leaflet/dist/images/marker-shadow.png";
 import "./VoiceMapScreens.css";
 import RoutePlanner from "./RoutePlanner.jsx";
 import RouteJourney from "./RouteJourney.jsx";
@@ -169,7 +172,12 @@ function MapArtwork({ location, pois = [], controllerRef, language = "vi", route
       } : {
         title: siblings.map((sibling) => localizedPoiName(sibling.poi.name, language)).join(" · "),
         alt: siblings.map((sibling) => localizedPoiName(sibling.poi.name, language)).join(" · "),
-        icon: new L.Icon.Default({ className: `guest-poi-marker${item.nearby ? " nearby" : ""}` }),
+        icon: L.icon({
+          iconUrl: markerIconUrl, iconRetinaUrl: markerRetinaUrl, shadowUrl: markerShadowUrl,
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
+          tooltipAnchor: [16, -28], shadowSize: [41, 41],
+          className: `guest-poi-marker${item.nearby ? " nearby" : ""}`,
+        }),
         ...(siblings.length > 1 ? { icon: L.divIcon({ className: `poi-map-group-marker${item.nearby ? " nearby" : ""}`, html: `<span>${siblings.length}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) } : {}),
       };
       const marker = L.marker(poiPosition, markerOptions)

@@ -20,8 +20,25 @@ public class AdminSessionInterceptor implements HandlerInterceptor {
         if (session != null && "ADMIN".equals(session.getAttribute("adminRole"))
                 && session.getAttribute("adminId") instanceof Long id) {
             try {
-                if (accounts.findById(id).filter(value -> "ACTIVE".equalsIgnoreCase(value.getStatus())
-                        && "ADMIN".equalsIgnoreCase(value.getRole())).isPresent()) return true;
+                var account = accounts.findById(id).filter(value -> "ACTIVE".equalsIgnoreCase(value.getStatus())
+                        && "ADMIN".equalsIgnoreCase(value.getRole()));
+                if (account.isPresent()) {
+                    var credential = session.getAttribute("adminCredential");
+                    if (credential != null && !credential.equals(account.get().getPasswordHash())) {
+                        session.invalidate();
+                        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Admin login required");
+                        return false;
+                    }
+                    boolean authEndpoint = java.util.Set.of("/api/admin/auth/me", "/api/admin/auth/logout",
+                            "/api/admin/auth/password").contains(request.getRequestURI());
+                    if (!authEndpoint && com.voiceover.backend.services.AdminPasswordPolicy.expired(account.get(), java.time.Instant.now())) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"code\":\"PASSWORD_CHANGE_REQUIRED\",\"message\":\"Mật khẩu đã quá 24 giờ. Vui lòng đổi mật khẩu để tiếp tục.\"}");
+                        return false;
+                    }
+                    return true;
+                }
             } catch (DataAccessException | CannotCreateTransactionException error) {
                 if ("/api/admin/monitoring/dashboard".equals(request.getRequestURI())) {
                     response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);

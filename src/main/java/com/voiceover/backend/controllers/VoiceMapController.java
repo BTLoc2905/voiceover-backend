@@ -32,6 +32,7 @@ public class VoiceMapController {
     private final AdminAccountRepository adminAccountRepo;
     private final PasswordEncoder passwordEncoder;
     private final MonitoringService monitoringService;
+    private final AdminPasswordService adminPasswordService;
 
     // ==================== API DU KHÁCH (KHÔNG CẦN ĐĂNG NHẬP - UC01..UC04) ====================
 
@@ -103,11 +104,8 @@ public class VoiceMapController {
         session.setMaxInactiveInterval(8 * 60 * 60);
         session.setAttribute("adminId", account.getId());
         session.setAttribute("adminRole", "ADMIN");
-        return ResponseEntity.ok(Map.of(
-                "id", account.getId(),
-                "email", account.getEmail(),
-                "fullName", account.getFullName(),
-                "role", account.getRole()));
+        session.setAttribute("adminCredential", account.getPasswordHash());
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(AdminPasswordPolicy.accountView(account));
     }
 
     @GetMapping("/admin/auth/me")
@@ -116,7 +114,16 @@ public class VoiceMapController {
         var account = adminAccountRepo.findById((Long) session.getAttribute("adminId"))
                 .filter(value -> "ACTIVE".equalsIgnoreCase(value.getStatus()) && "ADMIN".equalsIgnoreCase(value.getRole()))
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED));
-        return ResponseEntity.ok(Map.of("id", account.getId(), "email", account.getEmail(), "fullName", account.getFullName(), "role", account.getRole()));
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(AdminPasswordPolicy.accountView(account));
+    }
+
+    @PostMapping("/admin/auth/password")
+    public ResponseEntity<?> changeAdminPassword(@RequestBody Map<String, String> payload, HttpServletRequest request) {
+        var account = adminPasswordService.change((Long) request.getSession(false).getAttribute("adminId"),
+                payload.get("currentPassword"), payload.get("newPassword"), payload.get("confirmPassword"));
+        request.changeSessionId();
+        request.getSession(false).setAttribute("adminCredential", account.getPasswordHash());
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(AdminPasswordPolicy.accountView(account));
     }
 
     @PostMapping("/admin/auth/logout")

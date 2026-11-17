@@ -7,6 +7,8 @@ import TranslationReview from "./TranslationReview.jsx";
 import { languageLabel } from "./languageDisplay.js";
 import "./AdminVisual.css";
 import { startDashboardPolling } from "./dashboardPolling.js";
+import AdminPasswordChange from "./AdminPasswordChange.jsx";
+import { watchPasswordExpiry } from "./adminPassword.js";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -29,6 +31,7 @@ async function api(path, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (response.status === 401) window.dispatchEvent(new Event("voicemap-admin-session-expired"));
+  if (body.code === "PASSWORD_CHANGE_REQUIRED") window.dispatchEvent(new Event("voicemap-admin-password-expired"));
   if (!response.ok) {
     const error = new Error(body.message || "Không thể kết nối backend.");
     error.code = body.code;
@@ -42,6 +45,7 @@ async function uploadFile(path, file) {
   body.append("file", file);
   const response = await fetch(`${API_BASE}${path}`, { method: "POST", body });
   const result = await response.json().catch(() => ({}));
+  if (result.code === "PASSWORD_CHANGE_REQUIRED") window.dispatchEvent(new Event("voicemap-admin-password-expired"));
   if (!response.ok) throw new Error(result.message || "Không thể tải ảnh lên.");
   return result;
 }
@@ -311,13 +315,17 @@ export default function AdminPortal() {
   const [page, setPage] = useState(resolvePage);
   const [reviewDirty, setReviewDirty] = useState(false);
   const [routeDirty, setRouteDirty] = useState(false);
+  const [changePassword, setChangePassword] = useState(false);
+  useEffect(() => watchPasswordExpiry(account, () => setAccount(current => current ? { ...current, passwordChangeRequired: true } : current)), [account]);
   useEffect(() => {
     let active = true;
     const expired = () => setAccount(null);
+    const passwordExpired = () => setAccount(current => current ? { ...current, passwordChangeRequired: true } : current);
     window.addEventListener("voicemap-admin-session-expired", expired);
+    window.addEventListener("voicemap-admin-password-expired", passwordExpired);
     api("/api/admin/auth/me").then((value) => { if (active) setAccount(value); }).catch(() => {})
       .finally(() => { if (active) setAuthLoading(false); });
-    return () => { active = false; window.removeEventListener("voicemap-admin-session-expired", expired); };
+    return () => { active = false; window.removeEventListener("voicemap-admin-session-expired", expired); window.removeEventListener("voicemap-admin-password-expired", passwordExpired); };
   }, []);
   useEffect(() => {
     const handleBack = () => {
@@ -341,5 +349,8 @@ export default function AdminPortal() {
   };
   if (authLoading) return <main className="admin-login"><p role="status">Đang kiểm tra phiên quản trị…</p></main>;
   if (!account) return <Login onLogin={setAccount} />;
-  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "routes" ? "active" : ""} onClick={() => navigateAdmin("/admin/routes", "routes")}>◎ <span>Quản lý lộ trình</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if ((reviewDirty || routeDirty) && !window.confirm("Có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; void api("/api/admin/auth/logout", { method: "POST" }).then(() => setAccount(null)).catch((reason) => window.alert(reason.message)); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "routes" ? "Quản lý lộ trình" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><span>VoiceMap Admin</span></header>{page === "dashboard" ? <Dashboard /> : page === "routes" ? <RouteManagement onDirtyChange={setRouteDirty} /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
+  if (account.passwordChangeRequired || changePassword) return <AdminPasswordChange api={api} required={account.passwordChangeRequired}
+    onChanged={value => { setAccount(value); setChangePassword(false); setReviewDirty(false); setRouteDirty(false); }}
+    onCancel={() => setChangePassword(false)} onLogout={async () => { await api("/api/admin/auth/logout", { method: "POST" }); setAccount(null); setChangePassword(false); }} />;
+  return <div className="admin-shell"><aside className="sidebar"><div className="side-brand"><span>V</span><div><b>VoiceMap</b><small>Admin Portal</small></div></div><nav><button className={page === "dashboard" ? "active" : ""} onClick={() => navigateAdmin("/admin", "dashboard")}>▦ <span>Dashboard</span></button><button className={page === "pois" ? "active" : ""} onClick={() => navigateAdmin("/poimanagement", "pois")}>⌖ <span>POI Management</span></button><button className={page === "routes" ? "active" : ""} onClick={() => navigateAdmin("/admin/routes", "routes")}>◎ <span>Quản lý lộ trình</span></button><button className={page === "translations" ? "active" : ""} onClick={() => navigateAdmin("/admin/translations", "translations")}>◌ <span>Translations & Audio</span></button></nav><div className="side-bottom"><div className="account"><span>{account.fullName?.[0] || "A"}</span><div><b>{account.fullName || account.email}</b><small>{account.role || "ADMIN"}</small></div></div><button className="logout" onClick={() => { if ((reviewDirty || routeDirty) && !window.confirm("Có thay đổi chưa lưu. Đăng xuất và bỏ thay đổi?")) return; void api("/api/admin/auth/logout", { method: "POST" }).then(() => setAccount(null)).catch((reason) => window.alert(reason.message)); }}>Đăng xuất</button></div></aside><main className="admin-main"><header className="topbar"><span>Workspace / {page === "dashboard" ? "Dashboard" : page === "routes" ? "Quản lý lộ trình" : page === "translations" ? "Translations & Audio" : "POI Management"}</span><button type="button" className="secondary" onClick={() => { if ((reviewDirty || routeDirty) && !window.confirm("Có thay đổi chưa lưu. Mở trang đổi mật khẩu?")) return; setChangePassword(true); }}>Đổi mật khẩu</button></header>{page === "dashboard" ? <Dashboard /> : page === "routes" ? <RouteManagement onDirtyChange={setRouteDirty} /> : page === "translations" ? <TranslationReview onDirtyChange={setReviewDirty} /> : <PoiManagement />}</main></div>;
 }
